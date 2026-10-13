@@ -2,7 +2,7 @@
 Actores: Sistema ERP / Pedidos, Operador Logistico, Conductor, Cliente Final, Motor de Trafico / Mapas.
 Un viaje completo dura ~10 s (3 tramos de 3.3 s). Orden sugerido: ERP -> Operador -> Conductor -> Cliente.
 
-Uso:  pip install flask   |   python prototipo_actores.py   |   http://127.0.0.1:5000
+Uso:  pip install flask   |   python ruteo.py   |   http://127.0.0.1:5000
 """
 import time
 from copy import deepcopy
