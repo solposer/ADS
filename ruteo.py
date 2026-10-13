@@ -4,11 +4,11 @@ Un viaje completo dura ~10 s (3 tramos de 3.3 s). Orden sugerido: ERP -> Operado
 
 Uso:  pip install flask   |   python ruteo.py   |   http://127.0.0.1:5000
 """
-import time
 from copy import deepcopy
 from datetime import datetime, timedelta
 from itertools import permutations
-from math import radians, sin, cos, asin, sqrt
+from math import asin, cos, radians, sin, sqrt
+import time
 
 from flask import Flask, render_template_string, request
 
@@ -17,135 +17,298 @@ LEG_MS = 3300  # duracion simulada de cada tramo entre paradas
 
 # ------------------------------------------------------------------ datos
 DEPOT = "Almacén (Ate)"
-COORD = {DEPOT: (-12.0260, -76.9170), "Ate": (-12.0300, -76.9000), "Miraflores": (-12.1211, -77.0297),
-         "San Isidro": (-12.0977, -77.0365), "Surco": (-12.1450, -76.9930), "La Molina": (-12.0850, -76.9100),
-         "San Borja": (-12.1080, -77.0030), "Jesús María": (-12.0700, -77.0500), "Lince": (-12.0830, -77.0340)}
-TRAFICO = {d: f for d, f in zip(list(COORD)[1:], (1.0, 1.5, 1.4, 1.2, 1.0, 1.2, 1.3, 1.3))}
-E = "En ERP"; L = "Listo para despacho"
-_p = lambda i, c, d, di, kg, m3, b, v: dict(id=i, cliente=c, distrito=d, dir=di, kg=kg, m3=m3, bultos=b, veh=v, estado=E)
-PEDIDOS = [_p(4821, "Rosa Gómez", "Miraflores", "Av. Larco 345", 180, 0.9, 2, "V1"),
-           _p(4822, "Tienda Andina SAC", "San Isidro", "Calle Los Pinos 120", 240, 1.4, 3, "V1"),
-           _p(4823, "Carlos Medina", "Surco", "Av. Primavera 1250", 150, 0.8, 1, "V1"),
-           _p(4825, "Hogar Ideal SRL", "Lince", "Av. Arenales 1840", 120, 0.7, 2, "V2"),
-           _p(4826, "Marco Ríos", "Jesús María", "Av. Brasil 2320", 200, 1.0, 2, "V2"),
-           _p(4827, "Elena Castro", "San Borja", "Av. San Luis 2100", 160, 0.9, 1, "V2"),
-           _p(4828, "Electro Plus", "La Molina", "Av. La Molina 3400", 400, 2.6, 5, "V3"),
-           _p(4829, "Julio Vega", "Surco", "Av. Benavides 4100", 380, 2.2, 4, "V3"),
-           _p(4830, "Mueblería Sur", "Ate", "Av. Nicolás Ayllón 2900", 350, 2.4, 4, "V3")]
-FLOTA = {"V1": dict(tipo="Camión", placa="C-02", cap=1200, vol=8.0, cond="Luis Ramírez", estado="Disponible"),
-         "V2": dict(tipo="Furgoneta", placa="F-05", cap=800, vol=5.0, cond="Carla Soto", estado="Disponible"),
-         "V3": dict(tipo="Camión", placa="C-07", cap=1000, vol=7.0, cond="Jorge Paredes", estado="Disponible")}
+COORD = {
+    DEPOT: (-12.0260, -76.9170),
+    "Ate": (-12.0300, -76.9000),
+    "Miraflores": (-12.1211, -77.0297),
+    "San Isidro": (-12.0977, -77.0365),
+    "Surco": (-12.1450, -76.9930),
+    "La Molina": (-12.0850, -76.9100),
+    "San Borja": (-12.1080, -77.0030),
+    "Jesús María": (-12.0700, -77.0500),
+    "Lince": (-12.0830, -77.0340),
+}
+TRAFICO = {
+    d: f
+    for d, f in zip(
+        list(COORD)[1:], (1.0, 1.5, 1.4, 1.2, 1.0, 1.2, 1.3, 1.3)
+    )
+}
+E = "En ERP"
+L = "Listo para despacho"
+_p = lambda i, c, d, di, kg, m3, b, v: dict(
+    id=i,
+    cliente=c,
+    distrito=d,
+    dir=di,
+    kg=kg,
+    m3=m3,
+    bultos=b,
+    veh=v,
+    estado=E,
+)
+PEDIDOS = [
+    _p(4821, "Rosa Gómez", "Miraflores", "Av. Larco 345", 180, 0.9, 2, "V1"),
+    _p(4822, "Tienda Andina SAC", "San Isidro", "Calle Los Pinos 120", 240, 1.4, 3, "V1"),
+    _p(4823, "Carlos Medina", "Surco", "Av. Primavera 1250", 150, 0.8, 1, "V1"),
+    _p(4825, "Hogar Ideal SRL", "Lince", "Av. Arenales 1840", 120, 0.7, 2, "V2"),
+    _p(4826, "Marco Ríos", "Jesús María", "Av. Brasil 2320", 200, 1.0, 2, "V2"),
+    _p(4827, "Elena Castro", "San Borja", "Av. San Luis 2100", 160, 0.9, 1, "V2"),
+    _p(4828, "Electro Plus", "La Molina", "Av. La Molina 3400", 400, 2.6, 5, "V3"),
+    _p(4829, "Julio Vega", "Surco", "Av. Benavides 4100", 380, 2.2, 4, "V3"),
+    _p(4830, "Mueblería Sur", "Ate", "Av. Nicolás Ayllón 2900", 350, 2.4, 4, "V3"),
+]
+FLOTA = {
+    "V1": dict(
+        tipo="Camión",
+        placa="C-02",
+        cap=1200,
+        vol=8.0,
+        cond="Luis Ramírez",
+        estado="Disponible",
+    ),
+    "V2": dict(
+        tipo="Furgoneta",
+        placa="F-05",
+        cap=800,
+        vol=5.0,
+        cond="Carla Soto",
+        estado="Disponible",
+    ),
+    "V3": dict(
+        tipo="Camión",
+        placa="C-07",
+        cap=1000,
+        vol=7.0,
+        cond="Jorge Paredes",
+        estado="Disponible",
+    ),
+}
 RUTAS, INC, LOG, MOT = {}, [], [], []
 ST = dict(sel=None, gen=False, crit=None, cond=None, cli=4823)
 P0, T0 = deepcopy(PEDIDOS), deepcopy(TRAFICO)
 hora = lambda: datetime.now().strftime("%H:%M:%S")
 
 
-def log(m): LOG.insert(0, (hora(), m))
-def pd(i): return next(p for p in PEDIDOS if p["id"] == i)
-def sig(r): return next((s for s in r["stops"] if s["estado"] == "Pendiente"), None)
+def log(m):
+    LOG.insert(0, (hora(), m))
+
+
+def pd(i):
+    return next(p for p in PEDIDOS if p["id"] == i)
+
+
+def sig(r):
+    return next((s for s in r["stops"] if s["estado"] == "Pendiente"), None)
 
 
 # ------------------------------------------------------------ optimizacion
 def km(a, b):
     la1, lo1, la2, lo2 = map(radians, (*COORD[a], *COORD[b]))
-    h = sin((la2 - la1) / 2) ** 2 + cos(la1) * cos(la2) * sin((lo2 - lo1) / 2) ** 2
+    h = sin((la2 - la1) / 2) ** 2 + cos(la1) * cos(la2) * sin(
+        (lo2 - lo1) / 2
+    ) ** 2
     return 2 * 6371 * asin(sqrt(h)) * 1.35
 
 
 def evalua(orden, ini=DEPOT):
     pts, d, t = [ini] + [p["distrito"] for p in orden], 0, 0
     for a, b in zip(pts, pts[1:]):
-        k = km(a, b); d += k; t += k / 30 * 60 * TRAFICO.get(b, 1)
+        k = km(a, b)
+        d += k
+        t += k / 30 * 60 * TRAFICO.get(b, 1)
     return round(d, 1), round(t)
 
 
 def alternativas(ped):
     cer, rest, cur = [], list(ped), DEPOT
     while rest:
-        n = min(rest, key=lambda p: km(cur, p["distrito"])); cer.append(n); rest.remove(n); cur = n["distrito"]
-    base = {"rapida": ("Menor tiempo", list(min(permutations(ped), key=lambda o: evalua(o)[1]))),
-            "corta": ("Menor distancia", list(min(permutations(ped), key=lambda o: evalua(o)[0]))),
-            "cercano": ("Vecino más cercano", cer)}
-    return {k: dict(n=n, orden=o, km=evalua(o)[0], min=evalua(o)[1]) for k, (n, o) in base.items()}
+        n = min(rest, key=lambda p: km(cur, p["distrito"]))
+        cer.append(n)
+        rest.remove(n)
+        cur = n["distrito"]
+    base = {
+        "rapida": (
+            "Menor tiempo",
+            list(min(permutations(ped), key=lambda o: evalua(o)[1])),
+        ),
+        "corta": (
+            "Menor distancia",
+            list(min(permutations(ped), key=lambda o: evalua(o)[0])),
+        ),
+        "cercano": ("Vecino más cercano", cer),
+    }
+    return {
+        k: dict(n=n, orden=o, km=evalua(o)[0], min=evalua(o)[1])
+        for k, (n, o) in base.items()
+    }
 
 
 def recalcula(vid):  # CU-10
-    r = RUTAS[vid]; pend = [s for s in r["stops"] if s["estado"] == "Pendiente"]
+    r = RUTAS[vid]
+    pend = [s for s in r["stops"] if s["estado"] == "Pendiente"]
     hechos = [s for s in r["stops"] if s["estado"] != "Pendiente"]
-    if len(pend) < 2: return
+    if len(pend) < 2:
+        return
     ini = pd(hechos[-1]["pid"])["distrito"] if hechos else DEPOT
-    r["stops"] = hechos + list(min(permutations(pend), key=lambda o: evalua([pd(s["pid"]) for s in o], ini)[1]))
-    r["aviso"] = "Tráfico intenso: la ruta se recalculó y las paradas se reordenaron."
-    if r["fase"] == "viajando": r["t0"] = time.time()
+    r["stops"] = hechos + list(
+        min(
+            permutations(pend),
+            key=lambda o: evalua([pd(s["pid"]) for s in o], ini)[1],
+        )
+    )
+    r["aviso"] = (
+        "Tráfico intenso: la ruta se recalculó y las paradas se reordenaron."
+    )
+    if r["fase"] == "viajando":
+        r["t0"] = time.time()
     log(f"Ruta de {FLOTA[vid]['placa']} recalculada por cambio de tráfico")
 
 
 def siguiente(vid):
-    r = RUTAS[vid]; r["aviso"] = None
-    if sig(r): r["fase"] = "viajando"; r["t0"] = time.time()
+    r = RUTAS[vid]
+    r["aviso"] = None
+    if sig(r):
+        r["fase"] = "viajando"
+        r["t0"] = time.time()
     else:
-        r["fase"] = "finalizada"; FLOTA[vid]["estado"] = "Disponible"; log(f"Ruta de {FLOTA[vid]['placa']} finalizada")
+        r["fase"] = "finalizada"
+        FLOTA[vid]["estado"] = "Disponible"
+        log(f"Ruta de {FLOTA[vid]['placa']} finalizada")
 
 
 def tick():
     for vid, r in RUTAS.items():
-        if r["fase"] == "viajando" and (time.time() - r["t0"]) * 1000 >= LEG_MS:
-            r["fase"] = "en_parada"; log(f"{FLOTA[vid]['cond']} llegó al pedido #{sig(r)['pid']}")
+        if (
+            r["fase"] == "viajando"
+            and (time.time() - r["t0"]) * 1000 >= LEG_MS
+        ):
+            r["fase"] = "en_parada"
+            log(f"{FLOTA[vid]['cond']} llegó al pedido #{sig(r)['pid']}")
 
 
 # --------------------------------------------------------------------- API
 @app.post("/api/<a>")
 def api(a):
-    f = request.form; tick(); vid = ST["cond"]; r = RUTAS.get(vid)
+    f = request.form
+    tick()
+    vid = ST["cond"]
+    r = RUTAS.get(vid)
     if a == "erp":
         for p in PEDIDOS:
-            if p["estado"] == E: p["estado"] = L
+            if p["estado"] == E:
+                p["estado"] = L
         log("ERP envió los pedidos listos (direcciones, pesos y volúmenes)")
-    elif a == "op_sel": ST.update(sel=f["veh"], gen=False, crit=None)
+    elif a == "op_sel":
+        ST.update(sel=f["veh"], gen=False, crit=None)
     elif a == "op_gen":
-        ST["gen"] = True; MOT.insert(0, f"{hora()} Consulta de rutas para {FLOTA[ST['sel']]['placa']}: 3 alternativas devueltas")
-    elif a == "op_crit": ST["crit"] = f["crit"]
+        ST["gen"] = True
+        MOT.insert(
+            0,
+            f"{hora()} Consulta de rutas para {FLOTA[ST['sel']]['placa']}: 3"
+            " alternativas devueltas",
+        )
+    elif a == "op_crit":
+        ST["crit"] = f["crit"]
     elif a == "op_asignar":
-        v = ST["sel"]; ped = [p for p in PEDIDOS if p["veh"] == v and p["estado"] == L]; al = alternativas(ped)
+        v = ST["sel"]
+        ped = [p for p in PEDIDOS if p["veh"] == v and p["estado"] == L]
+        al = alternativas(ped)
         x = al[ST["crit"] or min(al, key=lambda k: al[k]["min"])]
-        RUTAS[v] = dict(stops=[dict(pid=p["id"], estado="Pendiente") for p in x["orden"]], fase="asignada", t0=0,
-                        crit=x["n"], km=x["km"], aus=None, aviso=None)
-        FLOTA[v]["estado"] = "En ruta"; ST.update(cond=v, sel=None, gen=False, crit=None)
-        for p in ped: p["estado"] = "En ruta"
-        log(f"Ruta registrada: {FLOTA[v]['placa']} con {FLOTA[v]['cond']} ({x['n']}, {x['km']} km)")
-    elif a == "c_sel": ST["cond"] = f["veh"]
-    elif a == "c_iniciar": r["fase"] = "viajando"; r["t0"] = time.time(); log(f"{FLOTA[vid]['cond']} inició su ruta")
+        RUTAS[v] = dict(
+            stops=[dict(pid=p["id"], estado="Pendiente") for p in x["orden"]],
+            fase="asignada",
+            t0=0,
+            crit=x["n"],
+            km=x["km"],
+            aus=None,
+            aviso=None,
+        )
+        FLOTA[v]["estado"] = "En ruta"
+        ST.update(cond=v, sel=None, gen=False, crit=None)
+        for p in ped:
+            p["estado"] = "En ruta"
+        log(
+            f"Ruta registrada: {FLOTA[v]['placa']} con {FLOTA[v]['cond']}"
+            f" ({x['n']}, {x['km']} km)"
+        )
+    elif a == "c_sel":
+        ST["cond"] = f["veh"]
+    elif a == "c_iniciar":
+        r["fase"] = "viajando"
+        r["t0"] = time.time()
+        log(f"{FLOTA[vid]['cond']} inició su ruta")
     elif a == "c_entregar":
-        s = sig(r); s["estado"] = "Entregado"; pd(s["pid"])["estado"] = "Entregado"
-        log(f"Pedido #{s['pid']} entregado. Notificación enviada a Logística"); siguiente(vid)
-    elif a == "c_aus": r["aus"] = dict(paso=1, pid=sig(r)["pid"], log=[f"{hora()} Cliente ausente marcado"])
+        s = sig(r)
+        s["estado"] = "Entregado"
+        pd(s["pid"])["estado"] = "Entregado"
+        log(f"Pedido #{s['pid']} entregado. Notificación enviada a Logística")
+        siguiente(vid)
+    elif a == "c_aus":
+        r["aus"] = dict(
+            paso=1,
+            pid=sig(r)["pid"],
+            log=[f"{hora()} Cliente ausente marcado"],
+        )
     elif a == "c_contactar":
-        r["aus"]["log"] += [f"{hora()} Motivo: {f['motivo']}", f"{hora()} Intento de contacto por llamada"]
+        r["aus"]["log"] += [
+            f"{hora()} Motivo: {f['motivo']}",
+            f"{hora()} Intento de contacto por llamada",
+        ]
         r["aus"].update(paso=2, motivo=f["motivo"])
-    elif a == "c_resp": r["aus"] = None
+    elif a == "c_resp":
+        r["aus"] = None
     elif a == "c_sin":
-        x = r["aus"]; next(s for s in r["stops"] if s["pid"] == x["pid"])["estado"] = "Fallido"
+        x = r["aus"]
+        next(s for s in r["stops"] if s["pid"] == x["pid"])["estado"] = "Fallido"
         pd(x["pid"])["estado"] = "Entrega fallida"
         INC.append(dict(id=len(INC) + 1, pid=x["pid"], estado="Pendiente"))
-        x["log"] += [f"{hora()} Sin respuesta del cliente", f"{hora()} Estado: Entrega fallida - cliente ausente", f"{hora()} Notificación enviada a Logística"]
-        x["paso"] = 3; log(f"Incidencia en pedido #{x['pid']}: cliente ausente. Notificación enviada a Logística")
-    elif a == "c_fin": r["aus"] = None; siguiente(vid)
+        x["log"] += [
+            f"{hora()} Sin respuesta del cliente",
+            f"{hora()} Estado: Entrega fallida - cliente ausente",
+            f"{hora()} Notificación enviada a Logística",
+        ]
+        x["paso"] = 3
+        log(
+            f"Incidencia en pedido #{x['pid']}: cliente ausente. Notificación"
+            " enviada a Logística"
+        )
+    elif a == "c_fin":
+        r["aus"] = None
+        siguiente(vid)
     elif a == "mot":
-        TRAFICO[f["d"]] = 3.0; MOT.insert(0, f"{hora()} Tráfico intenso informado en {f['d']}")
+        TRAFICO[f["d"]] = 3.0
+        MOT.insert(0, f"{hora()} Tráfico intenso informado en {f['d']}")
         for k, x in RUTAS.items():
-            if x["fase"] in ("viajando", "en_parada"): recalcula(k)
-    elif a == "cli": ST["cli"] = int(f["pid"])
+            if x["fase"] in ("viajando", "en_parada"):
+                recalcula(k)
+    elif a == "cli":
+        ST["cli"] = int(f["pid"])
     elif a in ("cli_fecha", "cli_dev"):  # CU-12
-        p = pd(ST["cli"]); i = next(i for i in INC if i["pid"] == p["id"] and i["estado"] == "Pendiente")
+        p = pd(ST["cli"])
+        i = next(
+            i
+            for i in INC
+            if i["pid"] == p["id"] and i["estado"] == "Pendiente"
+        )
         if a == "cli_fecha":
-            i["estado"] = "Reprogramada"; p["estado"] = L; p["nota"] = "Reprogramado para " + f["fecha"]
+            i["estado"] = "Reprogramada"
+            p["estado"] = L
+            p["nota"] = "Reprogramado para " + f["fecha"]
             log(f"Pedido #{p['id']} reprogramado para {f['fecha']}")
         else:
-            i["estado"] = "Devuelta"; p["estado"] = "Devuelto a almacén"; log(f"Pedido #{p['id']} devuelto al almacén")
+            i["estado"] = "Devuelta"
+            p["estado"] = "Devuelto a almacén"
+            log(f"Pedido #{p['id']} devuelto al almacén")
     elif a == "reset":
-        PEDIDOS[:] = deepcopy(P0); TRAFICO.update(T0); RUTAS.clear(); INC.clear(); LOG.clear(); MOT.clear()
-        for x in FLOTA.values(): x["estado"] = "Disponible"
+        PEDIDOS[:] = deepcopy(P0)
+        TRAFICO.update(T0)
+        RUTAS.clear()
+        INC.clear()
+        LOG.clear()
+        MOT.clear()
+        for x in FLOTA.values():
+            x["estado"] = "Disponible"
         ST.update(sel=None, gen=False, crit=None, cond=None, cli=4823)
     return "ok"
 
@@ -153,29 +316,94 @@ def api(a):
 # ------------------------------------------------------------------- vistas
 @app.get("/vista/<actor>")
 def vista(actor):
-    tick(); c = dict(FLOTA=FLOTA, pd=pd, ST=ST, COORD=COORD, TRAFICO=TRAFICO, LOG=LOG[:6], MOT=MOT[:5], E=E, L=L)
-    if actor == "erp": c["ped"] = PEDIDOS
+    tick()
+    c = dict(
+        FLOTA=FLOTA,
+        pd=pd,
+        ST=ST,
+        COORD=COORD,
+        TRAFICO=TRAFICO,
+        LOG=LOG[:6],
+        MOT=MOT[:5],
+        E=E,
+        L=L,
+    )
+    if actor == "erp":
+        c["ped"] = PEDIDOS
     elif actor == "operador":
-        v = FLOTA.get(ST["sel"]); ped = [p for p in PEDIDOS if p["veh"] == ST["sel"] and p["estado"] == L]
+        v = FLOTA.get(ST["sel"])
+        ped = [p for p in PEDIDOS if p["veh"] == ST["sel"] and p["estado"] == L]
         kg, m3 = sum(p["kg"] for p in ped), round(sum(p["m3"] for p in ped), 1)
         ok = bool(v and ped and kg <= v["cap"] and m3 <= v["vol"])
         al = alternativas(ped) if ok and ST["gen"] else None
         rec = min(al, key=lambda k: al[k]["min"]) if al else None
-        carga = {k: sum(p["kg"] for p in PEDIDOS if p["veh"] == k and p["estado"] in (L, "En ruta")) for k in FLOTA}
-        listos = {k: sum(p["veh"] == k and p["estado"] == L for p in PEDIDOS) for k in FLOTA}
-        c.update(v=v, ped=ped, kg=kg, m3=m3, ok=ok, al=al, rec=rec, crit=ST["crit"] or rec, carga=carga, listos=listos,
-                 rutas=RUTAS, live=any(r["fase"] in ("viajando", "en_parada") for r in RUTAS.values()))
+        carga = {
+            k: sum(
+                p["kg"]
+                for p in PEDIDOS
+                if p["veh"] == k and p["estado"] in (L, "En ruta")
+            )
+            for k in FLOTA
+        }
+        listos = {
+            k: sum(
+                p["veh"] == k and p["estado"] == L for p in PEDIDOS
+            )
+            for k in FLOTA
+        }
+        c.update(
+            v=v,
+            ped=ped,
+            kg=kg,
+            m3=m3,
+            ok=ok,
+            al=al,
+            rec=rec,
+            crit=ST["crit"] or rec,
+            carga=carga,
+            listos=listos,
+            rutas=RUTAS,
+            live=any(
+                r["fase"] in ("viajando", "en_parada") for r in RUTAS.values()
+            ),
+        )
     elif actor == "conductor":
-        vid = ST["cond"] if ST["cond"] in RUTAS else next(iter(RUTAS), None); r = RUTAS.get(vid)
+        vid = (
+            ST["cond"]
+            if ST["cond"] in RUTAS
+            else next(iter(RUTAS), None)
+        )
+        r = RUTAS.get(vid)
         c.update(rutas=RUTAS, vid=vid, r=r, sig=sig(r) if r else None)
         if r and r["fase"] == "viajando":
-            ms = (time.time() - r["t0"]) * 1000; c.update(prog=min(100, int(ms * 100 / LEG_MS)), rest=max(0, int(LEG_MS - ms)))
+            ms = (time.time() - r["t0"]) * 1000
+            c.update(
+                prog=min(100, int(ms * 100 / LEG_MS)),
+                rest=max(0, int(LEG_MS - ms)),
+            )
     elif actor == "cliente":
-        c.update(ped=[p for p in PEDIDOS if p["estado"] != E] or PEDIDOS, p=pd(ST["cli"]),
-                 fechas=[(datetime.now() + timedelta(days=n)).strftime("%d/%m") for n in (1, 2, 3)])
-        r = next((x for x in RUTAS.values() if any(s["pid"] == ST["cli"] for s in x["stops"])), None)
-        c["falt"] = sum(s["estado"] == "Pendiente" for s in r["stops"]) if r else None
-        c["pend"] = any(i["pid"] == ST["cli"] and i["estado"] == "Pendiente" for i in INC)
+        c.update(
+            ped=[p for p in PEDIDOS if p["estado"] != E] or PEDIDOS,
+            p=pd(ST["cli"]),
+            fechas=[
+                (datetime.now() + timedelta(days=n)).strftime("%d/%m")
+                for n in (1, 2, 3)
+            ],
+        )
+        r = next(
+            (
+                x
+                for x in RUTAS.values()
+                if any(s["pid"] == ST["cli"] for s in x["stops"])
+            ),
+            None,
+        )
+        c["falt"] = (
+            sum(s["estado"] == "Pendiente" for s in r["stops"]) if r else None
+        )
+        c["pend"] = any(
+            i["pid"] == ST["cli"] and i["estado"] == "Pendiente" for i in INC
+        )
     return render_template_string(T[actor], **c)
 
 
