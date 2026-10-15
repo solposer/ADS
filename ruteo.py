@@ -1,8 +1,5 @@
 """RutaPro - prototipo con una interfaz por actor (datos falsos, en memoria).
 Actores: Sistema ERP / Pedidos, Operador Logistico, Conductor, Cliente Final, Motor de Trafico / Mapas.
-Un viaje completo dura ~10 s (3 tramos de 3.3 s). Orden sugerido: ERP -> Operador -> Conductor -> Cliente.
-
-Uso:  pip install flask   |   python ruteo.py   |   http://127.0.0.1:5000
 """
 from copy import deepcopy
 from datetime import datetime, timedelta
@@ -10,9 +7,9 @@ from itertools import permutations
 from math import asin, cos, radians, sin, sqrt
 import time
 
-from flask import Flask, render_template_string, request
+from flask import Blueprint, render_template_string, request
 
-app = Flask(__name__)
+app = Blueprint("ruteo", __name__)
 LEG_MS = 3300  # duracion simulada de cada tramo entre paradas
 
 # ------------------------------------------------------------------ datos
@@ -144,7 +141,7 @@ def alternativas(ped):
     }
 
 
-def recalcula(vid):  # CU-10
+def recalcula(vid):
     r = RUTAS[vid]
     pend = [s for s in r["stops"] if s["estado"] == "Pendiente"]
     hechos = [s for s in r["stops"] if s["estado"] != "Pendiente"]
@@ -284,7 +281,7 @@ def api(a):
                 recalcula(k)
     elif a == "cli":
         ST["cli"] = int(f["pid"])
-    elif a in ("cli_fecha", "cli_dev"):  # CU-12
+    elif a in ("cli_fecha", "cli_dev"):
         p = pd(ST["cli"])
         i = next(
             i
@@ -419,7 +416,7 @@ T["home"] = """<!doctype html><html lang="es"><head><meta charset="utf-8"><meta 
 :root{--ink:#1b2a38;--mut:#5d6b78;--line:#d3dce3;--acc:#0f766e;--accbg:#d9f0ec;--gold:#fff2cc;--bad:#b42318}
 *{box-sizing:border-box}body{margin:0;background:#f2f5f7;color:var(--ink);font:15px/1.5 "Segoe UI",system-ui,sans-serif}
 header{background:#1b2a38;color:#fff;padding:14px 20px}header h1{margin:0;font-size:20px}header p{margin:2px 0 10px;color:#9fb0bf;font-size:13px}
-.tabs{display:flex;gap:8px;flex-wrap:wrap}.tabs button{background:#2c4156;color:#dbe5ec;text-align:left;padding:8px 14px;line-height:1.3}.tabs button small{display:block;color:#9fb0bf;font-size:12px}
+.tabs{display:flex;gap:8px;flex-wrap:wrap}.tabs button{background:#2c4156;color:#dbe5ec;text-align:left;padding:8px 14px;line-height:1.3;border:0;border-radius:6px;cursor:pointer}.tabs button small{display:block;color:#9fb0bf;font-size:12px}
 .tabs button.on{background:#fff;color:var(--ink)}.tabs button.on small{color:var(--mut)}.tabs .r{margin-left:auto;background:transparent;border:1px solid #476078}
 main{max-width:980px;margin:0 auto;padding:20px 16px 48px}h3{margin:0 0 10px;font-size:16px}.m{color:var(--mut)}
 .card{background:#fff;border:1px solid var(--line);border-radius:8px;padding:16px;margin-bottom:14px;overflow-x:auto}
@@ -433,14 +430,14 @@ button:focus-visible,select:focus-visible{outline:3px solid #7cc4bb;outline-offs
 label.opt{display:flex;gap:10px;border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px;cursor:pointer}label.opt.rec{border-color:var(--acc);background:var(--accbg)}
 .stop{border:1px solid var(--line);border-radius:8px;padding:8px 12px;margin-bottom:8px}.stop.now{border-color:var(--acc);background:var(--accbg)}.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.phone{max-width:420px}
 </style></head><body>
-<header><h1>RutaPro - prototipo por actor</h1><p>Elige un actor para ver su interfaz. Orden sugerido: ERP, Operador, Conductor, Cliente. Un viaje simulado dura unos 10 segundos.</p>
+<header><div style="margin-bottom: 8px;"><a href="/" style="color: #9fb0bf; text-decoration: none; font-size: 13px;">← Volver al Portal Principal</a></div><h1>RutaPro - prototipo por actor</h1><p>Elige un actor para ver su interfaz. Orden sugerido: ERP, Operador, Conductor, Cliente. Un viaje simulado dura unos 10 segundos.</p>
 <div class="tabs" id="tabs"></div></header><main id="panel"></main>
 <script>
 const A=[["erp","Sistema ERP / Pedidos","Sistema externo"],["operador","Operador Logístico","Persona, interna"],["conductor","Conductor","Persona, interna"],
 ["cliente","Cliente Final","Persona, externa"],["motor","Motor de Tráfico / Mapas","Sistema externo"]];
 let cur="erp",tm=null;const panel=document.getElementById("panel");
-document.getElementById("tabs").innerHTML=A.map(a=>`<button id="t-${a[0]}" onclick="load('${a[0]}')">${a[1]}<small>${a[2]}</small></button>`).join("")+`<button class="r" onclick="act('/api/reset').then(()=>load('erp'))">Reiniciar datos</button>`;
-async function load(v){if(v)cur=v;clearTimeout(tm);panel.innerHTML=await (await fetch("/vista/"+cur)).text();
+document.getElementById("tabs").innerHTML=A.map(a=>`<button id="t-${a[0]}" onclick="load('${a[0]}')">${a[1]}<small>${a[2]}</small></button>`).join("")+`<button class="r" onclick="act('/ruteo/api/reset').then(()=>load('erp'))">Reiniciar datos</button>`;
+async function load(v){if(v)cur=v;clearTimeout(tm);panel.innerHTML=await (await fetch("/ruteo/vista/"+cur)).text();
  A.forEach(a=>document.getElementById("t-"+a[0]).className=a[0]==cur?"on":"");
  const t=document.getElementById("tb");if(t){const rest=+t.dataset.rest;setTimeout(()=>{t.style.transition="width "+rest+"ms linear";t.style.width="100%"},30);tm=setTimeout(()=>load(),rest+250)}
  else if(document.getElementById("live"))tm=setTimeout(()=>load(),1500)}
@@ -453,23 +450,23 @@ T["erp"] = """<div class="card"><h3>Sistema ERP / Pedidos <span class="b">Sistem
 <table><tr><th>Pedido</th><th>Dirección</th><th>Coordenadas</th><th>Peso</th><th>Volumen</th><th>Bultos</th><th>Estado</th></tr>
 {% for p in ped %}<tr><td>#{{ p.id }}</td><td>{{ p.dir }}, {{ p.distrito }}</td><td>{{ '%.3f'|format(COORD[p.distrito][0]) }}, {{ '%.3f'|format(COORD[p.distrito][1]) }}</td>
 <td>{{ p.kg }} kg</td><td>{{ p.m3 }} m³</td><td>{{ p.bultos }}</td><td><span class="b {{ 'no' if p.estado==E else 'ok' }}">{{ 'Pendiente de envío' if p.estado==E else 'Enviado' }}</span></td></tr>{% endfor %}</table>
-<p><button onclick="act('/api/erp')">Enviar pedidos listos a RutaPro</button></p></div>"""
+<p><button onclick="act('/ruteo/api/erp')">Enviar pedidos listos a RutaPro</button></p></div>"""
 
 T["operador"] = """{% if live %}<span id="live"></span>{% endif %}
 <div class="card"><h3>Flota <span class="b">CU-03</span></h3><table><tr><th>Vehículo</th><th>Conductor</th><th>Capacidad</th><th>Carga</th><th>Pedidos listos</th><th>Estado</th><th></th></tr>
 {% for k,f in FLOTA.items() %}<tr><td>{{ f.tipo }} {{ f.placa }}</td><td>{{ f.cond }}</td><td>{{ f.cap }} kg / {{ f.vol }} m³</td>
 <td>{{ carga[k] }} kg<div class="bar {{ 'over' if carga[k]>f.cap }}"><i style="width:{{ [carga[k]*100//f.cap,100]|min }}%"></i></div></td><td>{{ listos[k] }}</td>
 <td><span class="b {{ 'ok' if f.estado=='Disponible' else '' }}">{{ f.estado }}</span></td>
-<td>{% if f.estado=='Disponible' and listos[k] %}<button class="sec" onclick="act('/api/op_sel',{veh:'{{ k }}'})">Planificar</button>{% endif %}</td></tr>{% endfor %}</table>
+<td>{% if f.estado=='Disponible' and listos[k] %}<button class="sec" onclick="act('/ruteo/api/op_sel',{veh:'{{ k }}'})">Planificar</button>{% endif %}</td></tr>{% endfor %}</table>
 {% if not carga.values()|sum %}<p class="m">Aún no hay pedidos recibidos. Entra como Sistema ERP y envía los pedidos.</p>{% endif %}</div>
 {% if v %}<div class="card"><h3>Validar capacidad <span class="b">CU-05</span> - {{ v.tipo }} {{ v.placa }}</h3>
 <p>Peso {{ kg }} de {{ v.cap }} kg. Volumen {{ m3 }} de {{ v.vol }} m³.</p>
-{% if ok %}{% if not al %}<button onclick="act('/api/op_gen')">Generar alternativas de ruta</button>{% endif %}
+{% if ok %}{% if not al %}<button onclick="act('/ruteo/api/op_gen')">Generar alternativas de ruta</button>{% endif %}
 {% else %}<div class="err">La carga excede la capacidad del vehículo. Reasigna pedidos a otro vehículo antes de generar rutas.</div>{% endif %}</div>{% endif %}
 {% if al %}<div class="card"><h3>Alternativas de ruta <span class="gold">Caso de uso diferenciador, CU-04</span></h3>
-{% for k,a in al.items() %}<label class="opt {{ 'rec' if k==rec }}" onclick="act('/api/op_crit',{crit:'{{ k }}'})"><input type="radio" name="c" {{ 'checked' if k==crit }}><span>
+{% for k,a in al.items() %}<label class="opt {{ 'rec' if k==rec }}" onclick="act('/ruteo/api/op_crit',{crit:'{{ k }}'})"><input type="radio" name="c" {{ 'checked' if k==crit }}><span>
 <strong>{{ a.n }}</strong>{% if k==rec %} <span class="b ok">Recomendada</span>{% endif %}<br>{{ a.orden|map(attribute='distrito')|join(' → ') }}<br><span class="m">{{ a.km }} km, {{ a.min }} min</span></span></label>{% endfor %}
-<button onclick="act('/api/op_asignar')">Seleccionar y asignar a vehículo y conductor (CU-06, CU-07)</button></div>{% endif %}
+<button onclick="act('/ruteo/api/op_asignar')">Seleccionar y asignar a vehículo y conductor (CU-06, CU-07)</button></div>{% endif %}
 <div class="card"><h3>Seguimiento en vivo</h3>{% if rutas %}<table><tr><th>Vehículo</th><th>Conductor</th><th>Avance</th><th>Estado</th></tr>
 {% for k,r in rutas.items() %}<tr><td>{{ FLOTA[k].placa }}</td><td>{{ FLOTA[k].cond }}</td><td>{{ r.stops|rejectattr('estado','eq','Pendiente')|list|length }} de {{ r.stops|length }} paradas</td>
 <td><span class="b">{{ {'asignada':'Asignada','viajando':'En camino','en_parada':'En una parada','finalizada':'Finalizada'}[r.fase] }}</span></td></tr>{% endfor %}</table>
@@ -477,37 +474,34 @@ T["operador"] = """{% if live %}<span id="live"></span>{% endif %}
 <div class="card"><h3>Historial <span class="b">CU-08</span></h3>{% for h,m in LOG %}<div><span class="m">{{ h }}</span> {{ m }}</div>{% else %}<p class="m">Sin eventos.</p>{% endfor %}</div>"""
 
 T["conductor"] = """{% if not r %}<div class="card"><p class="m">No tienes rutas asignadas. El Operador Logístico debe asignarte una ruta.</p></div>{% else %}
-<div class="row" style="margin-bottom:10px">{% for k in rutas %}<button class="{{ '' if k==vid else 'sec' }}" onclick="act('/api/c_sel',{veh:'{{ k }}'})">{{ FLOTA[k].cond }}</button>{% endfor %}</div>
+<div class="row" style="margin-bottom:10px">{% for k in rutas %}<button class="{{ '' if k==vid else 'sec' }}" onclick="act('/ruteo/api/c_sel',{veh:'{{ k }}'})">{{ FLOTA[k].cond }}</button>{% endfor %}</div>
 <div class="card phone"><h3>Ruta de {{ FLOTA[vid].cond }} <span class="b">CU-09</span></h3><p class="m">{{ FLOTA[vid].placa }}, {{ r.crit }}, {{ r.km }} km</p>
 {% if r.aviso %}<div class="flash">{{ r.aviso }} <span class="b">CU-10</span></div>{% endif %}
 {% for s in r.stops %}{% set p = pd(s.pid) %}<div class="stop {{ 'now' if s==sig }}"><strong>Parada {{ loop.index }}: pedido #{{ p.id }}</strong>
 <span class="b {{ 'ok' if s.estado=='Entregado' else ('no' if s.estado=='Fallido') }}">{{ s.estado }}</span><br>{{ p.dir }}, {{ p.distrito }}<br><span class="m">{{ p.cliente }}</span></div>{% endfor %}
-{% if r.fase=='asignada' %}<button onclick="act('/api/c_iniciar')">Iniciar ruta</button>
+{% if r.fase=='asignada' %}<button onclick="act('/ruteo/api/c_iniciar')">Iniciar ruta</button>
 {% elif r.fase=='viajando' %}<p>En camino a la parada {{ r.stops|rejectattr('estado','eq','Pendiente')|list|length + 1 }}...</p><div class="bar"><i id="tb" style="width:{{ prog }}%" data-rest="{{ rest }}"></i></div>
 {% elif r.fase=='en_parada' %}{% set a = r.aus %}
- {% if not a %}<p>Llegaste a la dirección del pedido #{{ sig.pid }}.</p><div class="row"><button onclick="act('/api/c_entregar')">Confirmar entrega</button><button class="sec" onclick="act('/api/c_aus')">Cliente ausente</button></div>
+ {% if not a %}<p>Llegaste a la dirección del pedido #{{ sig.pid }}.</p><div class="row"><button onclick="act('/ruteo/api/c_entregar')">Confirmar entrega</button><button class="sec" onclick="act('/ruteo/api/c_aus')">Cliente ausente</button></div>
  {% elif a.paso==1 %}<h3>Registrar cliente ausente <span class="b">CU-11</span></h3><select id="mo" aria-label="Motivo"><option>Nadie atiende en el domicilio</option><option>Dirección cerrada o sin acceso</option><option>Cliente no está en casa</option></select>
-  <p><button onclick="act('/api/c_contactar',{motivo:document.getElementById('mo').value})">Contactar al cliente (llamada)</button></p>
- {% elif a.paso==2 %}<div class="flash">Llamando al cliente...</div><div class="row"><button class="sec" onclick="act('/api/c_resp')">El cliente respondió</button><button onclick="act('/api/c_sin')">Sin respuesta</button></div>
+  <p><button onclick="act('/ruteo/api/c_contactar',{motivo:document.getElementById('mo').value})">Contactar al cliente (llamada)</button></p>
+ {% elif a.paso==2 %}<div class="flash">Llamando al cliente...</div><div class="row"><button class="sec" onclick="act('/ruteo/api/c_resp')">El cliente respondió</button><button onclick="act('/ruteo/api/c_sin')">Sin respuesta</button></div>
  {% else %}<div class="flash">Incidencia registrada. Logística fue notificada.</div><ul>{% for l in a.log %}<li>{{ l }}</li>{% endfor %}</ul>
-  <p class="m">El pedido queda pendiente de reprogramar o devolver (CU-12).</p><button onclick="act('/api/c_fin')">Continuar con la ruta</button>{% endif %}
+  <p class="m">El pedido queda pendiente de reprogramar o devolver (CU-12).</p><button onclick="act('/ruteo/api/c_fin')">Continuar con la ruta</button>{% endif %}
 {% else %}<div class="flash">Ruta finalizada. Todas las paradas fueron atendidas.</div>{% endif %}</div>{% endif %}"""
 
 T["cliente"] = """<div class="card phone"><h3>Mi pedido <span class="b">Cliente Final, CU-12</span></h3>
-<select aria-label="Pedido" onchange="act('/api/cli',{pid:this.value})">{% for x in ped %}<option value="{{ x.id }}" {{ 'selected' if x.id==p.id }}>#{{ x.id }} - {{ x.cliente }}</option>{% endfor %}</select>
+<select aria-label="Pedido" onchange="act('/ruteo/api/cli',{pid:this.value})">{% for x in ped %}<option value="{{ x.id }}" {{ 'selected' if x.id==p.id }}>#{{ x.id }} - {{ x.cliente }}</option>{% endfor %}</select>
 <p><strong>#{{ p.id }}</strong>, {{ p.dir }}, {{ p.distrito }}<br>Estado: <span class="b {{ 'ok' if p.estado in ('Entregado','En ruta') else ('no' if p.estado=='Entrega fallida') }}">{{ p.estado }}</span>{% if p.nota %}<br><span class="m">{{ p.nota }}</span>{% endif %}</p>
 {% if p.estado==E %}<p class="m">Tu pedido aún no fue enviado por el ERP.</p>
 {% elif p.estado=='En ruta' %}<p>Tu pedido está en camino. {% if falt is not none %}Faltan {{ falt }} parada(s) pendientes en la ruta.{% endif %}</p>
 {% elif p.estado=='Entregado' %}<div class="flash">Recibiste tu paquete. Gracias.</div>
 {% elif p.estado=='Entrega fallida' and pend %}<div class="err">No pudimos entregar tu pedido porque no te encontramos. Elige una nueva fecha:</div>
-<div class="row">{% for f in fechas %}<button class="sec" onclick="act('/api/cli_fecha',{fecha:'{{ f }}'})">{{ f }}</button>{% endfor %}<button class="sec" onclick="act('/api/cli_dev')">Devolver al almacén</button></div>
+<div class="row">{% for f in fechas %}<button class="sec" onclick="act('/ruteo/api/cli_fecha',{fecha:'{{ f }}'})">{{ f }}</button>{% endfor %}<button class="sec" onclick="act('/ruteo/api/cli_dev')">Devolver al almacén</button></div>
 {% elif p.estado==L %}<p class="m">Tu pedido está listo para despacho.</p>{% endif %}</div>"""
 
 T["motor"] = """<div class="card"><h3>Motor de Tráfico / Mapas <span class="b">Sistema externo, CU-04 y CU-10</span></h3>
 <p class="m">Entrega distancias y tráfico a RutaPro. Si informas tráfico intenso, las rutas en ejecución se recalculan solas.</p>
 <table><tr><th>Distrito</th><th>Factor de tráfico</th><th>Estado</th><th></th></tr>{% for d,f in TRAFICO.items() %}<tr><td>{{ d }}</td><td>{{ f }}</td>
-<td><span class="b {{ 'no' if f>=3 else 'ok' }}">{{ 'Intenso' if f>=3 else 'Normal' }}</span></td><td><button class="sec" onclick="act('/api/mot',{d:'{{ d }}'})">Informar tráfico intenso</button></td></tr>{% endfor %}</table></div>
+<td><span class="b {{ 'no' if f>=3 else 'ok' }}">{{ 'Intenso' if f>=3 else 'Normal' }}</span></td><td><button class="sec" onclick="act('/ruteo/api/mot',{d:'{{ d }}'})">Informar tráfico intenso</button></td></tr>{% endfor %}</table></div>
 <div class="card"><h3>Últimos eventos</h3>{% for m in MOT %}<div>{{ m }}</div>{% else %}<p class="m">Sin consultas todavía.</p>{% endfor %}</div>"""
-
-if __name__ == "__main__":
-    app.run(debug=True)
