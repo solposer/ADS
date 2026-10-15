@@ -1,14 +1,14 @@
 {
   "builds": [
     {
-      "src": "ruteo.py",
+      "src": "app.py",
       "use": "@vercel/python"
     }
   ],
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "ruteo.py"
+      "dest": "app.py"
     }
   ]
 }
