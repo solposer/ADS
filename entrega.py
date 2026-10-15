@@ -1,5 +1,5 @@
 """RIPLEY - Rama 3: Entrega y comunicación con el cliente
-Prototipo web integrado con los 10 casos de uso.
+Prototipo web integrado con los 10 casos de uso en Flask.
 """
 import datetime
 import json
@@ -33,14 +33,9 @@ PEDIDOS_BASE = [
 
 E = {}
 
-
-# -----------------------------------------------------------------------------
-# Utilidades comunes
-# -----------------------------------------------------------------------------
 def hhmm(minutos):
     m = round(minutos)
     return f"{(m // 60) % 24:02d}:{m % 60:02d}"
-
 
 def fecha_hoy():
     dias = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
@@ -48,66 +43,45 @@ def fecha_hoy():
     d = datetime.date.today()
     return f"{dias[d.weekday()]} {d.day} de {meses[d.month - 1]}"
 
-
 def aviso(msg, ok=True):
     return {"msg": msg, "ok": ok}
-
 
 def pedido_actual():
     return E["pedidos"][E["sel"]]
 
-
 def restante():
     return max(0.0, DISTANCIA_TOTAL * (1 - E["gps"]["p"]))
 
-
 def indice_estado(estado):
-    if estado == "Listo para despacho":
-        return 0
-    if estado == "En ruta":
-        return 1
-    if estado in ("En domicilio", "Entrega no concretada"):
-        return 2
-    if estado == "Entregado":
-        return 3
+    if estado == "Listo para despacho": return 0
+    if estado == "En ruta": return 1
+    if estado in ("En domicilio", "Entrega no concretada"): return 2
+    if estado == "Entregado": return 3
     return 0
 
-
 def ventana(pron):
-    if not pron:
-        return "—"
+    if not pron: return "—"
     return f"{hhmm(pron['eta'] - pron['margen'])} – {hhmm(pron['eta'] + pron['margen'])}"
-
 
 def registrar(cu, mensaje, nivel="", tipo="evento", pedido_id=None, valor=None):
     hora = hhmm(E["hora"])
     E["log"].insert(0, {"hora": hora, "cu": cu, "msg": mensaje, "nivel": nivel})
     del E["log"][80:]
     E["trazabilidad"].insert(0, {
-        "hora": hora,
-        "cu": cu,
-        "tipo": tipo,
+        "hora": hora, "cu": cu, "tipo": tipo,
         "pedido": pedido_id or pedido_actual()["id"],
-        "detalle": mensaje,
-        "valor": valor,
+        "detalle": mensaje, "valor": valor,
     })
     del E["trazabilidad"][250:]
 
-
 def notificar(pedido, titulo, cuerpo, tipo="general", enviada=True):
     n = {
-        "hora": hhmm(E["hora"]),
-        "pedido": pedido["id"],
-        "cliente": pedido["cliente"],
-        "titulo": titulo,
-        "cuerpo": cuerpo,
-        "tipo": tipo,
-        "enviada": enviada,
+        "hora": hhmm(E["hora"]), "pedido": pedido["id"], "cliente": pedido["cliente"],
+        "titulo": titulo, "cuerpo": cuerpo, "tipo": tipo, "enviada": enviada,
     }
     E["notificaciones"].insert(0, n)
     del E["notificaciones"][50:]
     return n
-
 
 def pronosticar(pedido, inicial=False):
     p = E["params"]
@@ -120,18 +94,12 @@ def pronosticar(pedido, inicial=False):
     confianza = 95 - 8 * p["trafico"] - 2 * p["paradas"] - (22 if not p["gps_disponible"] else 0) - (10 if not p["info_trafico"] else 0)
     return {
         "eta": E["hora"] + conduccion + min_paradas + extra_incidente,
-        "margen": margen,
-        "conf": round(max(35, min(96, confianza))),
-        "pre": not p["gps_disponible"],
-        "sin_trafico": not p["info_trafico"],
-        "km": round(km, 1),
-        "conduccion": round(conduccion),
-        "paradas_min": min_paradas,
-        "calculado": E["hora"],
-        "modelo": MODELO_ETA,
-        "inicial": inicial,
+        "margen": margen, "conf": round(max(35, min(96, confianza))),
+        "pre": not p["gps_disponible"], "sin_trafico": not p["info_trafico"],
+        "km": round(km, 1), "conduccion": round(conduccion),
+        "paradas_min": min_paradas, "calculado": E["hora"],
+        "modelo": MODELO_ETA, "inicial": inicial,
     }
-
 
 def asegurar_eta_inicial(pedido):
     if not pedido["eta_inicial"]:
@@ -142,15 +110,13 @@ def asegurar_eta_inicial(pedido):
         registrar("CU-03", f"ETA inicial calculada para {pedido['id']}: {ventana(pr)}", pedido_id=pedido["id"], tipo="eta", valor=hhmm(pr["eta"]))
     return pedido["eta_inicial"]
 
-
 def actualizar_eta(pedido, motivo="actualización"):
     asegurar_eta_inicial(pedido)
     nueva = pronosticar(pedido)
     vigente = pedido["eta"] or pedido["eta_inicial"]
     delta = nueva["eta"] - vigente["eta"]
 
-    if E["incidente"] > 0:
-        E["incidente"] -= 1
+    if E["incidente"] > 0: E["incidente"] -= 1
 
     if abs(delta) < UMBRAL_ESTABLE:
         E["estado_eta"] = "Pronóstico estable"
@@ -170,24 +136,16 @@ def actualizar_eta(pedido, motivo="actualización"):
     del pedido["eta_historial"][:-30]
     return pr
 
-
 def snapshot_cliente(pedido):
     pr = pedido["eta"] or pedido["eta_inicial"]
     return {
-        "id": pedido["id"],
-        "producto": pedido["producto"],
-        "estado": pedido["estado"],
+        "id": pedido["id"], "producto": pedido["producto"], "estado": pedido["estado"],
         "idx": indice_estado(pedido["estado"]),
         "eta": ventana(pr) if pr and pedido["estado"] not in ("Entregado", "Entrega no concretada") else ("Pedido entregado" if pedido["estado"] == "Entregado" else "Sin entrega" if pedido["estado"] == "Entrega no concretada" else "—"),
-        "eta_hora": hhmm(pr["eta"]) if pr else None,
-        "conf": pr["conf"] if pr else None,
-        "actualizado": hhmm(E["hora"]),
-        "km": round(restante(), 1),
-        "proximidad": pedido["proximidad"],
-        "entregado": pedido["estado"] == "Entregado",
-        "hora_real": pedido["hora_real"],
+        "eta_hora": hhmm(pr["eta"]) if pr else None, "conf": pr["conf"] if pr else None,
+        "actualizado": hhmm(E["hora"]), "km": round(restante(), 1), "proximidad": pedido["proximidad"],
+        "entregado": pedido["estado"] == "Entregado", "hora_real": pedido["hora_real"],
     }
-
 
 def detectar_proximidad(pedido, automatico=False):
     distancia = restante()
@@ -197,12 +155,10 @@ def detectar_proximidad(pedido, automatico=False):
         pedido["proximidad"] = True
         pedido["hora_proximidad"] = hhmm(E["hora"])
         registrar("CU-07", f"Proximidad detectada: {distancia:.2f} km ≤ radio {E['radio_proximidad']:.1f} km", pedido_id=pedido["id"], tipo="proximidad", valor=round(distancia, 2))
-        if E["auto_alerta"]:
-            enviar_alerta_proximidad(pedido, automatico=True)
+        if E["auto_alerta"]: enviar_alerta_proximidad(pedido, automatico=True)
     elif not dentro and not automatico:
         registrar("CU-07", f"Aún fuera del radio: {distancia:.2f} km > {E['radio_proximidad']:.1f} km", "w", pedido_id=pedido["id"], tipo="proximidad", valor=round(distancia, 2))
     return dentro
-
 
 def enviar_alerta_proximidad(pedido, automatico=False):
     if not pedido["proximidad"]:
@@ -219,7 +175,6 @@ def enviar_alerta_proximidad(pedido, automatico=False):
     registrar("CU-08", "Alerta de proximidad " + ("enviada mediante App Ripley" if enviada else "registrada en la App; push desactivado"), "" if enviada else "w", pedido_id=pedido["id"], tipo="alerta")
     return aviso("Alerta enviada al cliente." if enviada else "Push desactivado: la alerta quedó disponible dentro de la App Ripley.")
 
-
 def aplicar_estado(pedido, nuevo):
     E["hora"] += 2
     anterior = pedido["estado"]
@@ -228,7 +183,6 @@ def aplicar_estado(pedido, nuevo):
     pedido["historial"].insert(0, [hhmm(E["hora"]), nuevo])
     registrar("CU-05", f"{pedido['id']}: {anterior} → {nuevo}", pedido_id=pedido["id"], tipo="estado", valor=nuevo)
     notificar(pedido, "Estado de tu pedido actualizado", f"Tu pedido ahora está: {nuevo}.", "estado", True)
-
 
 def actualizar_estado(pedido, nuevo):
     permitidas = {
@@ -249,10 +203,8 @@ def actualizar_estado(pedido, nuevo):
     aplicar_estado(pedido, nuevo)
     return aviso(f"Estado actualizado a «{nuevo}». El cliente fue notificado.")
 
-
 def registrar_entrega(pedido):
-    if pedido["estado"] == "Entregado":
-        return aviso("La entrega ya fue registrada.", False)
+    if pedido["estado"] == "Entregado": return aviso("La entrega ya fue registrada.", False)
     if pedido["estado"] != "En domicilio":
         registrar("CU-09", f"No se puede entregar desde estado «{pedido['estado']}»", "w", pedido_id=pedido["id"], tipo="entrega")
         return aviso("Primero el pedido debe estar en estado «En domicilio» (CU-05).", False)
@@ -265,33 +217,17 @@ def registrar_entrega(pedido):
     E["gps"]["corriendo"] = False
     return aviso("Entrega registrada correctamente y cliente notificado.")
 
-
 def reiniciar():
     E.clear()
     E.update(
-        hora=540.0,
-        activo=False,
-        confirmando=False,
-        sin_pedidos=False,
-        falla_correo=False,
-        sel=0,
-        conexion=True,
-        params={"paradas": 3, "trafico": 1, "gps_disponible": True, "info_trafico": True},
+        hora=540.0, activo=False, confirmando=False, sin_pedidos=False, falla_correo=False,
+        sel=0, conexion=True, params={"paradas": 3, "trafico": 1, "gps_disponible": True, "info_trafico": True},
         gps={"p": 0.0, "corriendo": False, "senal": True, "invalido": False, "intervalo": 30,
              "recibidas": 0, "descartadas": 0, "antiguedad": 0, "velocidad": 0,
              "paquete": None, "estado": "En espera"},
-        incidente=0,
-        estado_eta="Sin calcular",
-        radio_proximidad=RADIO_PROXIMIDAD_BASE,
-        ultima_comparacion=None,
-        push_habilitado=True,
-        auto_alerta=True,
-        auto_eta=True,
-        correos=[],
-        notificaciones=[],
-        log=[],
-        trazabilidad=[],
-        cliente_snapshot=None,
+        incidente=0, estado_eta="Sin calcular", radio_proximidad=RADIO_PROXIMIDAD_BASE,
+        ultima_comparacion=None, push_habilitado=True, auto_alerta=True, auto_eta=True,
+        correos=[], notificaciones=[], log=[], trazabilidad=[], cliente_snapshot=None,
         pedidos=[{
             "id": p[0], "producto": p[1], "direccion": p[2], "cliente": p[3], "correo": p[4],
             "estado": "Listo para despacho", "historial": [], "eta_inicial": None, "eta": None,
@@ -303,15 +239,9 @@ def reiniciar():
     registrar("CU-10", "Prototipo reiniciado: estado inicial registrado", tipo="sistema")
     E["cliente_snapshot"] = snapshot_cliente(pedido_actual())
 
-
-# -----------------------------------------------------------------------------
-# Casos de uso: operaciones principales
-# -----------------------------------------------------------------------------
 def iniciar_recorrido():
-    if E["activo"]:
-        return aviso("El recorrido ya está activo.", False)
-    if E["sin_pedidos"]:
-        return aviso("No existen pedidos asignados para iniciar el recorrido.", False)
+    if E["activo"]: return aviso("El recorrido ya está activo.", False)
+    if E["sin_pedidos"]: return aviso("No existen pedidos asignados para iniciar el recorrido.", False)
     E["activo"] = True
     E["confirmando"] = False
     for i, p in enumerate(E["pedidos"]):
@@ -320,14 +250,12 @@ def iniciar_recorrido():
         p["historial"].insert(0, [hhmm(E["hora"]), "En ruta"])
         asegurar_eta_inicial(p)
         enviada = not (E["falla_correo"] and i == len(E["pedidos"]) - 1)
-        if enviada:
-            E["correos"].append({"para": p["correo"], "pedido": p["id"], "asunto": "Tu pedido va en camino"})
+        if enviada: E["correos"].append({"para": p["correo"], "pedido": p["id"], "asunto": "Tu pedido va en camino"})
         registrar("CU-01", f"{p['id']} inicia seguimiento y pasa a En ruta", pedido_id=p["id"], tipo="inicio")
     E["gps"]["estado"] = "Listo para recibir GPS"
     E["cliente_snapshot"] = snapshot_cliente(pedido_actual())
     enviados = len(E["correos"])
     return aviso(f"Recorrido iniciado. Seguimiento activo y {enviados}/{len(E['pedidos'])} avisos de despacho enviados.", enviados == len(E["pedidos"]))
-
 
 def recibir_posicion():
     g = E["gps"]
@@ -354,29 +282,22 @@ def recibir_posicion():
     g["antiguedad"] = 0
     g["estado"] = "Señal activa" if g["p"] < 1 else "En destino"
     g["paquete"] = {
-        "vehiculo": "V-214",
-        "lat": round(-12.213 + 0.116 * g["p"], 5),
-        "lng": round(-76.94 - 0.09 * g["p"], 5),
-        "vel_kmh": vel,
-        "hora": hhmm(E["hora"]),
+        "vehiculo": "V-214", "lat": round(-12.213 + 0.116 * g["p"], 5),
+        "lng": round(-76.94 - 0.09 * g["p"], 5), "vel_kmh": vel, "hora": hhmm(E["hora"]),
     }
     registrar("CU-02", f"Posición recibida · {vel} km/h · faltan {restante():.1f} km", tipo="gps", valor=round(restante(), 1))
 
     p = pedido_actual()
-    if p["eta_inicial"] is None:
-        asegurar_eta_inicial(p)
-    if E["auto_eta"] if "auto_eta" in E else True:
-        actualizar_eta(p, "nueva posición GPS")
+    if p["eta_inicial"] is None: asegurar_eta_inicial(p)
+    if E.get("auto_eta", True): actualizar_eta(p, "nueva posición GPS")
     detectar_proximidad(p, automatico=True)
     if g["p"] >= 1:
         g["corriendo"] = False
         registrar("CU-02", "Vehículo llegó al destino; GPS automático detenido", tipo="gps")
     return aviso("Ubicación GPS recibida y registrada.")
 
-
 def pron_json(pr):
-    if not pr:
-        return None
+    if not pr: return None
     return {
         "ventana": ventana(pr), "eta": hhmm(pr["eta"]), "conf": pr["conf"], "pre": pr["pre"],
         "sin_trafico": pr["sin_trafico"], "km": pr["km"], "conduccion": pr["conduccion"],
@@ -384,28 +305,15 @@ def pron_json(pr):
         "modelo": pr["modelo"],
     }
 
-
 def vista(msg=None):
     s = pedido_actual()
     return {
-        "aviso": msg,
-        "fecha": fecha_hoy(),
-        "hora": hhmm(E["hora"]),
-        "activo": E["activo"],
-        "confirmando": E["confirmando"],
-        "sin_pedidos": E["sin_pedidos"],
-        "falla_correo": E["falla_correo"],
-        "conexion": E["conexion"],
-        "sel": E["sel"],
-        "trafico_nombres": TRAFICO,
-        "params": E["params"],
+        "aviso": msg, "fecha": fecha_hoy(), "hora": hhmm(E["hora"]), "activo": E["activo"],
+        "confirmando": E["confirmando"], "sin_pedidos": E["sin_pedidos"], "falla_correo": E["falla_correo"],
+        "conexion": E["conexion"], "sel": E["sel"], "trafico_nombres": TRAFICO, "params": E["params"],
         "gps": dict(E["gps"], p=round(E["gps"]["p"], 4), km=round(restante(), 1)),
-        "incidente": E["incidente"] > 0,
-        "estado_eta": E["estado_eta"],
-        "radio": E["radio_proximidad"],
-        "comparacion": E["ultima_comparacion"],
-        "push": E["push_habilitado"],
-        "auto_alerta": E["auto_alerta"],
+        "incidente": E["incidente"] > 0, "estado_eta": E["estado_eta"], "radio": E["radio_proximidad"],
+        "comparacion": E["ultima_comparacion"], "push": E["push_habilitado"], "auto_alerta": E["auto_alerta"],
         "auto_eta": E["auto_eta"],
         "pedidos": [{
             "id": p["id"], "producto": p["producto"], "direccion": p["direccion"], "cliente": p["cliente"],
@@ -416,14 +324,10 @@ def vista(msg=None):
             "hora_proximidad": p["hora_proximidad"], "alerta": p["alerta_proximidad_enviada"],
             "hora_alerta": p["hora_alerta"], "hora_real": p["hora_real"],
         } for p in E["pedidos"]],
-        "cliente": E["cliente_snapshot"],
-        "correos": E["correos"],
-        "notificaciones": E["notificaciones"],
-        "log": E["log"],
-        "trazabilidad": E["trazabilidad"],
+        "cliente": E["cliente_snapshot"], "correos": E["correos"], "notificaciones": E["notificaciones"],
+        "log": E["log"], "trazabilidad": E["trazabilidad"],
         "maps_url": "https://www.google.com/maps/dir/?api=1&origin=" + quote("Centro de Distribución Villa El Salvador, Lima") + "&destination=" + quote(s["direccion"] + ", Lima"),
     }
-
 
 PAGINA = r'''<!DOCTYPE html>
 <html lang="es">
@@ -484,7 +388,11 @@ const $=id=>document.getElementById(id), T=(id,v)=>{const e=$(id);if(e)e.textCon
 const CUS=[
 ['CU-01','Iniciar seguimiento del pedido','Transportista / Sistema de Gestión'],['CU-02','Recibir ubicación GPS','Servicio GPS'],['CU-03','Calcular ETA','Sistema de Gestión'],['CU-04','Actualizar ETA','Sistema de Gestión'],['CU-05','Actualizar estado del pedido','Transportista'],['CU-06','Consultar estado y ETA','Cliente'],['CU-07','Detectar proximidad','Sistema de Gestión'],['CU-08','Enviar alerta de proximidad','Cliente'],['CU-09','Registrar entrega efectiva','Transportista'],['CU-10','Registrar tiempos e historial','Sistema de Gestión']];
 function toast(a){document.querySelectorAll('.toast').forEach(x=>x.remove());const d=document.createElement('div');d.className='toast'+(a.ok?'':' bad');d.textContent=a.msg;document.body.appendChild(d);clearTimeout(tt);tt=setTimeout(()=>d.remove(),3500)}
-async function api(url,data={}){const r=await fetch('/entrega'+url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});const e=await r.json();if(e.aviso)toast(e.aviso);draw(e);return e}
+async function api(path,data={}){
+  const url = path.startsWith('/entrega') ? path : '/entrega' + path;
+  const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+  const e=await r.json();if(e.aviso)toast(e.aviso);draw(e);return e;
+}
 async function tick(){try{const r=await fetch('/entrega/api/tick',{method:'POST'});draw(await r.json())}catch(e){}setTimeout(tick,900)}
 function ir(i){for(let k=0;k<=10;k++)$('v'+k).hidden=k!==i;[...document.querySelectorAll('#tabs .tab')].forEach((b,k)=>b.classList.toggle('on',k===i));scrollTo(0,0)}
 function stateSteps(idx){return `<div class="stp">${['Preparado','En ruta','En domicilio','Entregado'].map((x,k)=>`<span class="${k<idx?'done':k===idx?'on':''}">${x}</span>`).join('')}</div>`}
@@ -505,6 +413,7 @@ function render07(){const p=pedido();$('map07').innerHTML=mapHtml(E);$('r07').va
 function render08(){const p=pedido();$('c08push').checked=E.push;$('c08auto').checked=E.auto_alerta;$('b08send').disabled=!p.proximidad\vert{}\vert{}p.alerta;$('cu08app').innerHTML=`<b>App Ripley</b><div class="oc"><span><b>${p.id}</b><small>${p.producto}</small></span><span class="badge ${p.proximidad?'ok':''}">${p.proximidad?'Cerca':'En ruta'}</span></div>${p.alerta?'<div class="nt ok"><b>🔔 Tu pedido está cerca</b><br>El vehículo ingresó al radio de proximidad.</div>':'<div class="nt">Aún no se generó una alerta de proximidad.</div>'}`;$('notifs').innerHTML=E.notificaciones.length?E.notificaciones.slice(0,6).map(n=>`<div class="oc"><span><b>${n.titulo}</b><small>${n.hora} · ${n.pedido}<br>${n.cuerpo}</small></span><span class="badge ${n.enviada?'ok':'wn'}">${n.enviada?'Enviada':'En App'}</span></div>`).join(''):'<p class="mt">Sin notificaciones.</p>'}
 function render09(){const p=pedido();$('cu09app').innerHTML=`<b>${p.id} · ${p.producto}</b>${stateSteps(p.idx)}<div class="oc"><span>Estado</span><span class="badge ${p.estado==='Entregado'?'ok':''}">${p.estado}</span></div>${p.hora_real?`<div class="nt ok">Hora real de entrega: <b>${p.hora_real}</b></div>`:'<div class="nt">Aún no se registró la entrega efectiva.</div>'}`;$('b09del').disabled=p.estado!=='En domicilio'||p.estado==='Entregado'}
 function render10(){const p=pedido();T('k10a',p.eta_inicial?p.eta_inicial.eta:'—');T('k10b',p.eta?p.eta.eta:'—');T('k10c',p.hora_real||'—');T('k10d',E.trazabilidad.length);$('trace').innerHTML=`<table><tr><th>Hora</th><th>CU</th><th>Tipo</th><th>Pedido</th><th>Detalle</th></tr>${E.trazabilidad.slice(0,30).map(x=>`<tr><td>${x.hora}</td><td>${x.cu}</td><td>${x.tipo}</td><td>${x.pedido}</td><td>${x.detalle}</td></tr>`).join('')}</table>`}
+
 // Eventos
 $('b01sin').onclick=()=>api('/api/cu01/sin_pedidos');$('c01mail').onchange=e=>api('/api/cu01/falla_correo',{valor:e.target.checked});
 $('b02run').onclick=()=>api('/api/cu02/toggle');$('b02step').onclick=()=>api('/api/cu02/paso');$('b02sig').onclick=()=>api('/api/cu02/senal');$('b02bad').onclick=()=>api('/api/cu02/invalido');$('s02int').onchange=e=>api('/api/cu02/intervalo',{valor:+e.target.value});$('s03ped').onchange=e=>api('/api/cu06/seleccionar',{valor:+e.target.value});$('n03par').onchange=e=>api('/api/params',{paradas:+e.target.value});$('c03gps').onchange=e=>api('/api/params',{gps:e.target.checked});$('c03traf').onchange=e=>api('/api/params',{info:e.target.checked});$('b03calc').onclick=()=>api('/api/cu03/calcular');
@@ -512,6 +421,7 @@ $('s04traf').onchange=e=>api('/api/cu04/trafico',{valor:+e.target.value});$('b04
 $('b05conn').onclick=()=>api('/api/conexion');$('b06ref').onclick=()=>api('/api/cu06/actualizar');
 $('r07').onchange=e=>api('/api/cu07/radio',{valor:+e.target.value});$('b07det').onclick=()=>api('/api/cu07/detectar');$('b07near').onclick=()=>api('/api/cu07/acercar');$('c08push').onchange=e=>api('/api/cu08/push',{valor:e.target.checked});$('c08auto').onchange=e=>api('/api/cu08/auto',{valor:e.target.checked});$('b08send').onclick=()=>api('/api/cu08/enviar');
 $('b09arr').onclick=()=>api('/api/cu09/llegada');$('b09del').onclick=()=>api('/api/cu09/entregar');$('b10snap').onclick=()=>api('/api/cu10/snapshot');$('bReset').onclick=()=>api('/api/reiniciar');
+
 // Construir pestañas
 $('tabs').innerHTML='<button class="tab on" onclick="ir(0)">Guía</button>'+CUS.map((c,i)=>`<button class="tab" onclick="ir(${i+1})">${c[0]}</button>`).join('');
 ir(0);tick();
@@ -519,23 +429,19 @@ ir(0);tick();
 </body>
 </html>'''
 
-
 # -----------------------------------------------------------------------------
-# API
+# API Routes
 # -----------------------------------------------------------------------------
 def datos():
     return request.get_json(silent=True) or {}
-
 
 @app.route("/")
 def index():
     return Response(PAGINA, mimetype="text/html")
 
-
 @app.get("/api/estado")
 def api_estado():
     return jsonify(vista())
-
 
 @app.post("/api/tick")
 def api_tick():
@@ -543,8 +449,7 @@ def api_tick():
         recibir_posicion()
     return jsonify(vista())
 
-
-# CU-01 -----------------------------------------------------------------------
+# CU-01
 @app.post("/api/cu01/preparar")
 def api_cu01_preparar():
     if E["activo"]:
@@ -554,18 +459,15 @@ def api_cu01_preparar():
     E["confirmando"] = True
     return jsonify(vista())
 
-
 @app.post("/api/cu01/cancelar")
 def api_cu01_cancelar():
     E["confirmando"] = False
     registrar("CU-01", "Inicio cancelado; pedidos permanecen listos para despacho", "w", tipo="inicio")
     return jsonify(vista(aviso("Inicio cancelado.")))
 
-
 @app.post("/api/cu01/confirmar")
 def api_cu01_confirmar():
     return jsonify(vista(iniciar_recorrido()))
-
 
 @app.post("/api/cu01/sin_pedidos")
 def api_cu01_sin_pedidos():
@@ -575,14 +477,12 @@ def api_cu01_sin_pedidos():
         registrar("CU-01", "Sin pedidos asignados" if E["sin_pedidos"] else "Pedidos asignados nuevamente", "w" if E["sin_pedidos"] else "", tipo="inicio")
     return jsonify(vista())
 
-
 @app.post("/api/cu01/falla_correo")
 def api_cu01_falla_correo():
     E["falla_correo"] = bool(datos().get("valor"))
     return jsonify(vista())
 
-
-# CU-02 -----------------------------------------------------------------------
+# CU-02
 @app.post("/api/cu02/toggle")
 def api_cu02_toggle():
     if not E["activo"]:
@@ -592,11 +492,9 @@ def api_cu02_toggle():
     registrar("CU-02", "Envío periódico GPS " + ("iniciado" if E["gps"]["corriendo"] else "pausado"), tipo="gps")
     return jsonify(vista())
 
-
 @app.post("/api/cu02/paso")
 def api_cu02_paso():
     return jsonify(vista(recibir_posicion()))
-
 
 @app.post("/api/cu02/senal")
 def api_cu02_senal():
@@ -604,13 +502,11 @@ def api_cu02_senal():
     registrar("CU-02", "Señal GPS restablecida" if E["gps"]["senal"] else "Señal GPS perdida", "" if E["gps"]["senal"] else "w", tipo="gps")
     return jsonify(vista())
 
-
 @app.post("/api/cu02/invalido")
 def api_cu02_invalido():
     E["gps"]["invalido"] = True
     registrar("CU-02", "Se inyectó un dato inválido para el próximo envío", "w", tipo="gps")
     return jsonify(vista())
-
 
 @app.post("/api/cu02/intervalo")
 def api_cu02_intervalo():
@@ -619,8 +515,7 @@ def api_cu02_intervalo():
         E["gps"]["intervalo"] = v
     return jsonify(vista())
 
-
-# Parámetros compartidos -------------------------------------------------------
+# Parámetros compartidos
 @app.post("/api/params")
 def api_params():
     d = datos()
@@ -632,8 +527,7 @@ def api_params():
         E["params"]["info_trafico"] = bool(d["info"])
     return jsonify(vista())
 
-
-# CU-03 -----------------------------------------------------------------------
+# CU-03
 @app.post("/api/cu03/calcular")
 def api_cu03_calcular():
     if not E["activo"]:
@@ -650,8 +544,7 @@ def api_cu03_calcular():
     E["estado_eta"] = "ETA inicial calculada"
     return jsonify(vista(aviso("ETA inicial calculada y registrada.")))
 
-
-# CU-04 -----------------------------------------------------------------------
+# CU-04
 @app.post("/api/cu04/actualizar")
 def api_cu04_actualizar():
     if not E["activo"]:
@@ -659,13 +552,11 @@ def api_cu04_actualizar():
     actualizar_eta(pedido_actual(), "actualización manual")
     return jsonify(vista(aviso("ETA actualizada.")))
 
-
 @app.post("/api/cu04/incidente")
 def api_cu04_incidente():
     E["incidente"] = 3
     registrar("CU-04", "Incidente en vía: +25 min durante las próximas actualizaciones", "w", tipo="eta")
     return jsonify(vista())
-
 
 @app.post("/api/cu04/trafico")
 def api_cu04_trafico():
@@ -675,18 +566,15 @@ def api_cu04_trafico():
         registrar("CU-04", f"Tráfico configurado como {TRAFICO[v]}", "w", tipo="eta")
     return jsonify(vista())
 
-
 @app.post("/api/cu04/auto")
 def api_cu04_auto():
     E["auto_eta"] = bool(datos().get("valor", True))
     return jsonify(vista())
 
-
-# CU-05 -----------------------------------------------------------------------
+# CU-05
 @app.post("/api/cu05/estado")
 def api_cu05_estado():
     return jsonify(vista(actualizar_estado(pedido_actual(), datos().get("nuevo"))))
-
 
 @app.post("/api/conexion")
 def api_conexion():
@@ -704,8 +592,7 @@ def api_conexion():
     registrar("CU-05", "Conexión perdida; próximos cambios se guardarán en cola", "w", tipo="estado")
     return jsonify(vista(aviso("Sin conexión: cambios posteriores quedarán en cola.", False)))
 
-
-# CU-06 -----------------------------------------------------------------------
+# CU-06
 @app.post("/api/cu06/seleccionar")
 def api_cu06_seleccionar():
     i = int(datos().get("valor", 0))
@@ -715,20 +602,17 @@ def api_cu06_seleccionar():
         registrar("CU-06", f"Cliente seleccionó {pedido_actual()['id']} en Mis pedidos", pedido_id=pedido_actual()["id"], tipo="consulta")
     return jsonify(vista())
 
-
 @app.post("/api/cu06/actualizar")
 def api_cu06_actualizar():
     E["cliente_snapshot"] = snapshot_cliente(pedido_actual())
     registrar("CU-06", "Cliente actualizó estado y ETA en la App Ripley", pedido_id=pedido_actual()["id"], tipo="consulta")
     return jsonify(vista(aviso("Información de la App actualizada.")))
 
-
-# CU-07 -----------------------------------------------------------------------
+# CU-07
 @app.post("/api/cu07/detectar")
 def api_cu07_detectar():
     dentro = detectar_proximidad(pedido_actual())
     return jsonify(vista(aviso("Vehículo dentro del radio de proximidad." if dentro else "Vehículo todavía fuera del radio.", dentro)))
-
 
 @app.post("/api/cu07/acercar")
 def api_cu07_acercar():
@@ -739,7 +623,6 @@ def api_cu07_acercar():
     detectar_proximidad(pedido_actual())
     return jsonify(vista(aviso("Vehículo colocado a 0.8 km del destino para la demostración.")))
 
-
 @app.post("/api/cu07/radio")
 def api_cu07_radio():
     v = float(datos().get("valor", 1.0))
@@ -747,12 +630,10 @@ def api_cu07_radio():
     registrar("CU-07", f"Radio de proximidad configurado en {E['radio_proximidad']:.1f} km", tipo="proximidad")
     return jsonify(vista())
 
-
-# CU-08 -----------------------------------------------------------------------
+# CU-08
 @app.post("/api/cu08/enviar")
 def api_cu08_enviar():
     return jsonify(vista(enviar_alerta_proximidad(pedido_actual())))
-
 
 @app.post("/api/cu08/push")
 def api_cu08_push():
@@ -760,14 +641,12 @@ def api_cu08_push():
     registrar("CU-08", "Push habilitado" if E["push_habilitado"] else "Push deshabilitado", "" if E["push_habilitado"] else "w", tipo="alerta")
     return jsonify(vista())
 
-
 @app.post("/api/cu08/auto")
 def api_cu08_auto():
     E["auto_alerta"] = bool(datos().get("valor", True))
     return jsonify(vista())
 
-
-# CU-09 -----------------------------------------------------------------------
+# CU-09
 @app.post("/api/cu09/llegada")
 def api_cu09_llegada():
     E["gps"]["p"] = 1.0
@@ -777,13 +656,11 @@ def api_cu09_llegada():
     detectar_proximidad(pedido_actual(), automatico=True)
     return jsonify(vista(aviso("Llegada física registrada. Actualice el estado a «En domicilio» en CU-05 si aún no lo hizo.")))
 
-
 @app.post("/api/cu09/entregar")
 def api_cu09_entregar():
     return jsonify(vista(registrar_entrega(pedido_actual())))
 
-
-# CU-10 -----------------------------------------------------------------------
+# CU-10
 @app.post("/api/cu10/snapshot")
 def api_cu10_snapshot():
     p = pedido_actual()
@@ -791,11 +668,9 @@ def api_cu10_snapshot():
     registrar("CU-10", detalle, tipo="snapshot", pedido_id=p["id"])
     return jsonify(vista(aviso("Snapshot de trazabilidad registrado.")))
 
-
 def etaText_py(p):
     pr = p["eta"] or p["eta_inicial"]
     return ventana(pr) if pr else "—"
-
 
 @app.get("/api/cu10/exportar")
 def api_cu10_exportar():
@@ -807,11 +682,9 @@ def api_cu10_exportar():
     }
     return Response(json.dumps(payload, ensure_ascii=False, indent=2), mimetype="application/json", headers={"Content-Disposition": "attachment; filename=trazabilidad_ripley.json"})
 
-
 @app.post("/api/reiniciar")
 def api_reiniciar():
     reiniciar()
     return jsonify(vista(aviso("Prototipo reiniciado.")))
-
 
 reiniciar()
