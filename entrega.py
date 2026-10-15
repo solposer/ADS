@@ -401,33 +401,29 @@ const CUS=[
 ['CU-10','Registrar tiempos e historial','Sistema de Gestión']
 ];
 
-window.ir = function(i){
+function ir(i){
   for(let k=0; k<=10; k++){
     const el = $('v'+k);
     if(el) el.hidden = (k !== i);
   }
   const tabs = document.querySelectorAll('#tabs .tab');
-  tabs.forEach((b, k) => b.classList.toggle('on', k === i));
+  tabs.forEach(function(b, k){ b.classList.toggle('on', k === i); });
   window.scrollTo(0, 0);
-};
-
-window.callApi = function(path, data){
-  api(path, data);
-};
+}
 
 function toast(a){
-  document.querySelectorAll('.toast').forEach(x=>x.remove());
+  document.querySelectorAll('.toast').forEach(function(x){ x.remove(); });
   const d=document.createElement('div');
   d.className='toast'+(a.ok?'':' bad');
   d.textContent=a.msg;
   document.body.appendChild(d);
   clearTimeout(tt);
-  tt=setTimeout(()=>d.remove(),3500);
+  tt=setTimeout(function(){ d.remove(); },3500);
 }
 
 async function api(path, data){
   data = data || {};
-  const url = path.startsWith('/entrega') ? path : '/entrega' + path;
+  const url = path.indexOf('/entrega') === 0 ? path : '/entrega' + path;
   try {
     const r = await fetch(url, {
       method: 'POST',
@@ -474,23 +470,25 @@ function etaText(p){ return p.eta ? p.eta.ventana : (p.eta_inicial ? p.eta_inici
 function draw(e){
   E=e; const p=pedido();
   T('gPed',p.id); T('gSt',p.estado); T('gHora',e.hora); T('gKm',e.gps.km+' km'); T('gEta',etaText(p));
-  $('log').innerHTML=e.log.map(x=>'<li class="' + x.nivel + '"><time>' + x.hora + '</time><b>' + x.cu + '</b><span>' + x.msg + '</span></li>').join('');
+  $('log').innerHTML=e.log.map(function(x){ return '<li class="' + x.nivel + '"><time>' + x.hora + '</time><b>' + x.cu + '</b><span>' + x.msg + '</span></li>'; }).join('');
   renderResumen(); render01(); render02(); render03(); render04(); render05(); render06(); render07(); render08(); render09(); render10();
 }
 
 function renderResumen(){ 
-  $('resumenCU').innerHTML=CUS.map((c,i)=>'<div class="cu-card"><span class="badge">' + c[0] + '</span><b>' + c[1] + '</b><small>' + c[2] + '</small><br><button class="btn g" style="margin-top:8px" onclick="window.ir(' + (i+1) + ')">Abrir</button></div>').join(''); 
+  $('resumenCU').innerHTML=CUS.map(function(c,i){
+    return '<div class="cu-card"><span class="badge">' + c[0] + '</span><b>' + c[1] + '</b><small>' + c[2] + '</small><br><button class="btn g btn-nav" data-tab="' + (i+1) + '" style="margin-top:8px">Abrir</button></div>';
+  }).join(''); 
 }
 
 function render01(){
   const p=pedido();
   let h = '<b>Ruta de hoy · Camión V-214</b><small class="mt">' + E.fecha + '</small>';
   if(!E.activo){
-    h += E.sin_pedidos ? '<div class="nt bad">Sin pedidos asignados.</div>' : E.pedidos.map(x=>'<div class="oc"><span><b>' + x.id + '</b><small>' + x.producto + '</small></span><span class="badge">' + x.estado + '</span></div>').join('');
+    h += E.sin_pedidos ? '<div class="nt bad">Sin pedidos asignados.</div>' : E.pedidos.map(function(x){ return '<div class="oc"><span><b>' + x.id + '</b><small>' + x.producto + '</small></span><span class="badge">' + x.estado + '</span></div>'; }).join('');
     if(E.confirmando){
-      h += '<div class="nt ok">¿Confirmar inicio del seguimiento?</div><div class="row"><button class="btn g" onclick="window.callApi(\'/api/cu01/cancelar\')">Cancelar</button><button class="btn" onclick="window.callApi(\'/api/cu01/confirmar\')">Confirmar</button></div>';
+      h += '<div class="nt ok">¿Confirmar inicio del seguimiento?</div><div class="row"><button class="btn g btn-act" data-api="/api/cu01/cancelar">Cancelar</button><button class="btn btn-act" data-api="/api/cu01/confirmar">Confirmar</button></div>';
     } else {
-      h += '<button class="btn" ' + (E.sin_pedidos?'disabled':'') + ' onclick="window.callApi(\'/api/cu01/preparar\')">Iniciar recorrido</button>';
+      h += '<button class="btn btn-act" ' + (E.sin_pedidos?'disabled':'') + ' data-api="/api/cu01/preparar">Iniciar recorrido</button>';
     }
   } else {
     h += '<div class="nt ok"><b>Seguimiento activo</b><br>' + E.pedidos.length + ' pedidos en ruta.</div>' + stateSteps(p.idx) + '<a class="btn g" href="' + E.maps_url + '" target="_blank">Abrir ruta en Maps</a>';
@@ -502,8 +500,8 @@ function render01(){
 }
 
 function render02(){ $('map02').innerHTML=mapHtml(E);T('b02run',E.gps.corriendo?'Pausar envíos GPS':'Iniciar envíos GPS');T('b02sig',E.gps.senal?'Perder señal':'Restablecer señal');T('k02a',E.gps.estado);T('k02b',E.gps.recibidas);T('k02c',E.gps.descartadas);T('k02d',E.gps.velocidad?E.gps.velocidad+' km/h':'—');$('s02int').value=E.gps.intervalo;$('gpsRaw').textContent=E.gps.paquete?JSON.stringify(E.gps.paquete,null,2):'Aún no se recibió un paquete GPS.';}
-function render03(){const p=pedido();$('s03ped').innerHTML=E.pedidos.map((x,i)=>'<option value="' + i + '">' + x.id + ' · ' + x.producto + '</option>').join('');$('s03ped').value=E.sel;$('n03par').value=E.params.paradas;$('c03gps').checked=E.params.gps_disponible;$('c03traf').checked=E.params.info_trafico;const pr=p.eta_inicial;T('k03a',pr?pr.eta:'—');T('k03b',pr?pr.ventana:'—');T('k03c',pr?pr.conf+' %':'—');T('d03',pr?pr.conduccion + ' min conducción + ' + pr.paradas_min + ' min paradas · margen ±' + pr.margen + ' min · ' + pr.modelo:'Aún no hay ETA inicial.');}
-function render04(){const p=pedido();$('s04traf').value=E.params.trafico;$('c04auto').checked=E.auto_eta!==false;T('k04a',E.estado_eta);T('k04b',p.eta_inicial?p.eta_inicial.ventana:'—');T('k04c',p.eta?p.eta.ventana:'—');$('etaHist').innerHTML=p.eta_historial.length?'<table><tr><th>Hora</th><th>ETA</th><th>Tipo</th></tr>' + p.eta_historial.slice().reverse().map(x=>'<tr><td>' + x.hora + '</td><td>' + x.ventana + '</td><td>' + x.tipo + '</td></tr>').join('') + '</table>':'<p class="mt">Sin actualizaciones.</p>';}
+function render03(){const p=pedido();$('s03ped').innerHTML=E.pedidos.map(function(x,i){ return '<option value="' + i + '">' + x.id + ' · ' + x.producto + '</option>'; }).join('');$('s03ped').value=E.sel;$('n03par').value=E.params.paradas;$('c03gps').checked=E.params.gps_disponible;$('c03traf').checked=E.params.info_trafico;const pr=p.eta_inicial;T('k03a',pr?pr.eta:'—');T('k03b',pr?pr.ventana:'—');T('k03c',pr?pr.conf+' %':'—');T('d03',pr?pr.conduccion + ' min conducción + ' + pr.paradas_min + ' min paradas · margen ±' + pr.margen + ' min · ' + pr.modelo:'Aún no hay ETA inicial.');}
+function render04(){const p=pedido();$('s04traf').value=E.params.trafico;$('c04auto').checked=E.auto_eta!==false;T('k04a',E.estado_eta);T('k04b',p.eta_inicial?p.eta_inicial.ventana:'—');T('k04c',p.eta?p.eta.ventana:'—');$('etaHist').innerHTML=p.eta_historial.length?'<table><tr><th>Hora</th><th>ETA</th><th>Tipo</th></tr>' + p.eta_historial.slice().reverse().map(function(x){ return '<tr><td>' + x.hora + '</td><td>' + x.ventana + '</td><td>' + x.tipo + '</td></tr>'; }).join('') + '</table>':'<p class="mt">Sin actualizaciones.</p>';}
 
 function render05(){
   const p=pedido(), ops=p.estado==='En ruta'?['En domicilio','Entrega no concretada']:p.estado==='En domicilio'?['Entrega no concretada']:[];
@@ -511,19 +509,21 @@ function render05(){
   if(!E.activo){
     h += '<div class="nt bad">Primero inicie CU-01.</div>';
   } else if(ops.length) {
-    h += '<div class="fld"><label>Nuevo estado</label><select id="s05new">' + ops.map(x=>'<option>' + x + '</option>').join('') + '<option>Entregado</option></select></div><button class="btn" onclick="window.callApi(\'/api/cu05/estado\',{nuevo:$(\'s05new\').value})">Guardar estado</button>';
+    h += '<div class="fld"><label>Nuevo estado</label><select id="s05new">' + ops.map(function(x){ return '<option>' + x + '</option>'; }).join('') + '<option>Entregado</option></select></div><button class="btn" id="b05save">Guardar estado</button>';
   } else {
     h += '<div class="nt">No hay transiciones disponibles desde CU-05.</div>';
   }
   if(p.pendiente) h += '<div class="nt wn">Pendiente de sincronizar: ' + p.pendiente + '</div>';
   $('cu05app').innerHTML=h;
+  const b05save = $('b05save');
+  if(b05save) b05save.onclick = function(){ api('/api/cu05/estado', {nuevo: $('s05new').value}); };
   T('p05conn',E.conexion?'Conexión activa. Los cambios se registran inmediatamente.':'Sin conexión. Los cambios se guardan en cola.');
   T('b05conn',E.conexion?'Perder conexión':'Restablecer conexión');
 }
 
 function render06(){
   const p=pedido(),c=E.cliente;
-  $('cu06app').innerHTML='<b>App Ripley · Mis pedidos</b><div class="row">' + E.pedidos.map((x,i)=>'<button class="tab ' + (i===E.sel?'on':'') + '" onclick="window.callApi(\'/api/cu06/seleccionar\',{valor:' + i + '})">' + x.id + '</button>').join('') + '</div><div class="oc"><span><b>' + p.producto + '</b><small>' + p.direccion + '</small></span><span class="badge">' + c.estado + '</span></div>' + stateSteps(c.idx) + '<div class="eta"><small>Llegada estimada</small><b>' + c.eta + '</b><small>Actualizado ' + c.actualizado + '</small></div>' + (c.proximidad?'<div class="nt ok">Tu pedido está cerca.</div>':'') + (c.entregado?'<div class="nt ok">Entrega registrada a las ' + c.hora_real + '.</div>':'');
+  $('cu06app').innerHTML='<b>App Ripley · Mis pedidos</b><div class="row">' + E.pedidos.map(function(x,i){ return '<button class="tab btn-sel-ped ' + (i===E.sel?'on':'') + '" data-idx="' + i + '">' + x.id + '</button>'; }).join('') + '</div><div class="oc"><span><b>' + p.producto + '</b><small>' + p.direccion + '</small></span><span class="badge">' + c.estado + '</span></div>' + stateSteps(c.idx) + '<div class="eta"><small>Llegada estimada</small><b>' + c.eta + '</b><small>Actualizado ' + c.actualizado + '</small></div>' + (c.proximidad?'<div class="nt ok">Tu pedido está cerca.</div>':'') + (c.entregado?'<div class="nt ok">Entrega registrada a las ' + c.hora_real + '.</div>':'');
   T('k06gps',E.gps.senal?'Disponible':'Sin señal');
   T('k06tr',E.trafico_nombres[E.params.trafico]);
   T('k06prox',p.proximidad?'Dentro del radio':'No detectada');
@@ -538,7 +538,7 @@ function render08(){
   $('c08auto').checked=E.auto_alerta;
   $('b08send').disabled=!p.proximidad||p.alerta;
   $('cu08app').innerHTML='<b>App Ripley</b><div class="oc"><span><b>' + p.id + '</b><small>' + p.producto + '</small></span><span class="badge ' + (p.proximidad?'ok':'') + '">' + (p.proximidad?'Cerca':'En ruta') + '</span></div>' + (p.alerta?'<div class="nt ok"><b>🔔 Tu pedido está cerca</b><br>El vehículo ingresó al radio de proximidad.</div>':'<div class="nt">Aún no se generó una alerta de proximidad.</div>');
-  $('notifs').innerHTML=E.notificaciones.length ? E.notificaciones.slice(0,6).map(n=>'<div class="oc"><span><b>' + n.titulo + '</b><small>' + n.hora + ' · ' + n.pedido + '<br>' + n.cuerpo + '</small></span><span class="badge ' + (n.enviada?'ok':'wn') + '">' + (n.enviada?'Enviada':'En App') + '</span></div>').join('') : '<p class="mt">Sin notificaciones.</p>';
+  $('notifs').innerHTML=E.notificaciones.length ? E.notificaciones.slice(0,6).map(function(n){ return '<div class="oc"><span><b>' + n.titulo + '</b><small>' + n.hora + ' · ' + n.pedido + '<br>' + n.cuerpo + '</small></span><span class="badge ' + (n.enviada?'ok':'wn') + '">' + (n.enviada?'Enviada':'En App') + '</span></div>'; }).join('') : '<p class="mt">Sin notificaciones.</p>';
 }
 
 function render09(){
@@ -553,49 +553,63 @@ function render10(){
   T('k10b',p.eta?p.eta.eta:'—');
   T('k10c',p.hora_real||'—');
   T('k10d',E.trazabilidad.length);
-  $('trace').innerHTML='<table><tr><th>Hora</th><th>CU</th><th>Tipo</th><th>Pedido</th><th>Detalle</th></tr>' + E.trazabilidad.slice(0,30).map(x=>'<tr><td>' + x.hora + '</td><td>' + x.cu + '</td><td>' + x.tipo + '</td><td>' + x.pedido + '</td><td>' + x.detalle + '</td></tr>').join('') + '</table>';
+  $('trace').innerHTML='<table><tr><th>Hora</th><th>CU</th><th>Tipo</th><th>Pedido</th><th>Detalle</th></tr>' + E.trazabilidad.slice(0,30).map(function(x){ return '<tr><td>' + x.hora + '</td><td>' + x.cu + '</td><td>' + x.tipo + '</td><td>' + x.pedido + '</td><td>' + x.detalle + '</td></tr>'; }).join('') + '</table>';
 }
 
 document.addEventListener("DOMContentLoaded", function() {
+  document.body.addEventListener("click", function(evt) {
+    var t = evt.target;
+    if(t.classList.contains("btn-nav")) {
+      var tabIdx = parseInt(t.getAttribute("data-tab"), 10);
+      ir(tabIdx);
+    } else if(t.classList.contains("btn-act")) {
+      var apiPath = t.getAttribute("data-api");
+      api(apiPath);
+    } else if(t.classList.contains("btn-sel-ped")) {
+      var pIdx = parseInt(t.getAttribute("data-idx"), 10);
+      api('/api/cu06/seleccionar', {valor: pIdx});
+    }
+  });
+
   const btnGoCU1 = $('btnGoCU1');
-  if(btnGoCU1) btnGoCU1.onclick = function(){ window.ir(1); };
+  if(btnGoCU1) btnGoCU1.onclick = function(){ ir(1); };
 
-  $('b01sin').onclick=()=>api('/api/cu01/sin_pedidos');
-  $('c01mail').onchange=e=>api('/api/cu01/falla_correo',{valor:e.target.checked});
-  $('b02run').onclick=()=>api('/api/cu02/toggle');
-  $('b02step').onclick=()=>api('/api/cu02/paso');
-  $('b02sig').onclick=()=>api('/api/cu02/senal');
-  $('b02bad').onclick=()=>api('/api/cu02/invalido');
-  $('s02int').onchange=e=>api('/api/cu02/intervalo',{valor:+e.target.value});
-  $('s03ped').onchange=e=>api('/api/cu06/seleccionar',{valor:+e.target.value});
-  $('n03par').onchange=e=>api('/api/params',{paradas:+e.target.value});
-  $('c03gps').onchange=e=>api('/api/params',{gps:e.target.checked});
-  $('c03traf').onchange=e=>api('/api/params',{info:e.target.checked});
-  $('b03calc').onclick=()=>api('/api/cu03/calcular');
-  $('s04traf').onchange=e=>api('/api/cu04/trafico',{valor:+e.target.value});
-  $('b04upd').onclick=()=>api('/api/cu04/actualizar');
-  $('b04inc').onclick=()=>api('/api/cu04/incidente');
-  $('c04auto').onchange=e=>api('/api/cu04/auto',{valor:e.target.checked});
-  $('b05conn').onclick=()=>api('/api/conexion');
-  $('b06ref').onclick=()=>api('/api/cu06/actualizar');
-  $('r07').onchange=e=>api('/api/cu07/radio',{valor:+e.target.value});
-  $('b07det').onclick=()=>api('/api/cu07/detectar');
-  $('b07near').onclick=()=>api('/api/cu07/acercar');
-  $('c08push').onchange=e=>api('/api/cu08/push',{valor:e.target.checked});
-  $('c08auto').onchange=e=>api('/api/cu08/auto',{valor:e.target.checked});
-  $('b08send').onclick=()=>api('/api/cu08/enviar');
-  $('b09arr').onclick=()=>api('/api/cu09/llegada');
-  $('b09del').onclick=()=>api('/api/cu09/entregar');
-  $('b10snap').onclick=()=>api('/api/cu10/snapshot');
-  $('bReset').onclick=()=>api('/api/reiniciar');
+  $('b01sin').onclick=function(){ api('/api/cu01/sin_pedidos'); };
+  $('c01mail').onchange=function(e){ api('/api/cu01/falla_correo',{valor:e.target.checked}); };
+  $('b02run').onclick=function(){ api('/api/cu02/toggle'); };
+  $('b02step').onclick=function(){ api('/api/cu02/paso'); };
+  $('b02sig').onclick=function(){ api('/api/cu02/senal'); };
+  $('b02bad').onclick=function(){ api('/api/cu02/invalido'); };
+  $('s02int').onchange=function(e){ api('/api/cu02/intervalo',{valor:+e.target.value}); };
+  $('s03ped').onchange=function(e){ api('/api/cu06/seleccionar',{valor:+e.target.value}); };
+  $('n03par').onchange=function(e){ api('/api/params',{paradas:+e.target.value}); };
+  $('c03gps').onchange=function(e){ api('/api/params',{gps:e.target.checked}); };
+  $('c03traf').onchange=function(e){ api('/api/params',{info:e.target.checked}); };
+  $('b03calc').onclick=function(){ api('/api/cu03/calcular'); };
+  $('s04traf').onchange=function(e){ api('/api/cu04/trafico',{valor:+e.target.value}); };
+  $('b04upd').onclick=function(){ api('/api/cu04/actualizar'); };
+  $('b04inc').onclick=function(){ api('/api/cu04/incidente'); };
+  $('c04auto').onchange=function(e){ api('/api/cu04/auto',{valor:e.target.checked}); };
+  $('b05conn').onclick=function(){ api('/api/conexion'); };
+  $('b06ref').onclick=function(){ api('/api/cu06/actualizar'); };
+  $('r07').onchange=function(e){ api('/api/cu07/radio',{valor:+e.target.value}); };
+  $('b07det').onclick=function(){ api('/api/cu07/detectar'); };
+  $('b07near').onclick=function(){ api('/api/cu07/acercar'); };
+  $('c08push').onchange=function(e){ api('/api/cu08/push',{valor:e.target.checked}); };
+  $('c08auto').onchange=function(e){ api('/api/cu08/auto',{valor:e.target.checked}); };
+  $('b08send').onclick=function(){ api('/api/cu08/enviar'); };
+  $('b09arr').onclick=function(){ api('/api/cu09/llegada'); };
+  $('b09del').onclick=function(){ api('/api/cu09/entregar'); };
+  $('b10snap').onclick=function(){ api('/api/cu10/snapshot'); };
+  $('bReset').onclick=function(){ api('/api/reiniciar'); };
 
-  let tabsHtml = '<button class="tab on" onclick="window.ir(0)">Guía</button>';
+  let tabsHtml = '<button class="tab on btn-nav" data-tab="0">Guía</button>';
   for(let i=0; i<CUS.length; i++){
-    tabsHtml += '<button class="tab" onclick="window.ir(' + (i+1) + ')">' + CUS[i][0] + '</button>';
+    tabsHtml += '<button class="tab btn-nav" data-tab="' + (i+1) + '">' + CUS[i][0] + '</button>';
   }
   $('tabs').innerHTML = tabsHtml;
 
-  window.ir(0);
+  ir(0);
   tick();
 });
 </script>
