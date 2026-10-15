@@ -154,7 +154,7 @@ def detectar_proximidad(pedido, automatico=False):
     if dentro and not pedido["proximidad"]:
         pedido["proximidad"] = True
         pedido["hora_proximidad"] = hhmm(E["hora"])
-        registrar("CU-07", f"Proximidad detectada: {distancia:.2f} km ≤ radio {E['radio_proximidad']:.1f} km", pedido_id=pedido["id"], tipo="proximidad", valor=round(distancia, 2))
+        registrar("CU-07", f"Proximidad detectada: {distancia:.2f} km <= radio {E['radio_proximidad']:.1f} km", pedido_id=pedido["id"], tipo="proximidad", valor=round(distancia, 2))
         if E["auto_alerta"]: enviar_alerta_proximidad(pedido, automatico=True)
     elif not dentro and not automatico:
         registrar("CU-07", f"Aún fuera del radio: {distancia:.2f} km > {E['radio_proximidad']:.1f} km", "w", pedido_id=pedido["id"], tipo="proximidad", valor=round(distancia, 2))
@@ -181,7 +181,7 @@ def aplicar_estado(pedido, nuevo):
     pedido["estado"] = nuevo
     pedido["actualizado"] = hhmm(E["hora"])
     pedido["historial"].insert(0, [hhmm(E["hora"]), nuevo])
-    registrar("CU-05", f"{pedido['id']}: {anterior} → {nuevo}", pedido_id=pedido["id"], tipo="estado", valor=nuevo)
+    registrar("CU-05", f"{pedido['id']}: {anterior} -> {nuevo}", pedido_id=pedido["id"], tipo="estado", valor=nuevo)
     notificar(pedido, "Estado de tu pedido actualizado", f"Tu pedido ahora está: {nuevo}.", "estado", True)
 
 def actualizar_estado(pedido, nuevo):
@@ -190,24 +190,24 @@ def actualizar_estado(pedido, nuevo):
         "En domicilio": ["Entrega no concretada"],
     }
     if pedido["estado"] not in permitidas:
-        return aviso(f"El pedido está «{pedido['estado']}» y no admite cambios desde CU-05.", False)
+        return aviso(f"El pedido está '{pedido['estado']}' y no admite cambios desde CU-05.", False)
     if nuevo == "Entregado":
         registrar("CU-05", "Transición a Entregado rechazada: debe registrarse en CU-09", "b", pedido_id=pedido["id"])
         return aviso("Para marcar el pedido como Entregado debe usar CU-09 · Registrar entrega efectiva.", False)
     if nuevo not in permitidas[pedido["estado"]]:
-        return aviso(f"Transición no permitida: {pedido['estado']} → {nuevo}.", False)
+        return aviso(f"Transición no permitida: {pedido['estado']} -> {nuevo}.", False)
     if not E["conexion"]:
         pedido["pendiente"] = nuevo
-        registrar("CU-05", f"Sin conexión: «{nuevo}» quedó en cola", "w", pedido_id=pedido["id"], tipo="estado")
+        registrar("CU-05", f"Sin conexión: '{nuevo}' quedó en cola", "w", pedido_id=pedido["id"], tipo="estado")
         return aviso("Sin conexión: el cambio quedó en cola y se sincronizará al recuperar conexión.")
     aplicar_estado(pedido, nuevo)
-    return aviso(f"Estado actualizado a «{nuevo}». El cliente fue notificado.")
+    return aviso(f"Estado actualizado a '{nuevo}'. El cliente fue notificado.")
 
 def registrar_entrega(pedido):
     if pedido["estado"] == "Entregado": return aviso("La entrega ya fue registrada.", False)
     if pedido["estado"] != "En domicilio":
-        registrar("CU-09", f"No se puede entregar desde estado «{pedido['estado']}»", "w", pedido_id=pedido["id"], tipo="entrega")
-        return aviso("Primero el pedido debe estar en estado «En domicilio» (CU-05).", False)
+        registrar("CU-09", f"No se puede entregar desde estado '{pedido['estado']}'", "w", pedido_id=pedido["id"], tipo="entrega")
+        return aviso("Primero el pedido debe estar en estado 'En domicilio' (CU-05).", False)
     pedido["estado"] = "Entregado"
     pedido["hora_real"] = hhmm(E["hora"])
     pedido["actualizado"] = pedido["hora_real"]
@@ -329,7 +329,7 @@ def vista(msg=None):
         "maps_url": "https://www.google.com/maps/dir/?api=1&origin=" + quote("Centro de Distribución Villa El Salvador, Lima") + "&destination=" + quote(s["direccion"] + ", Lima"),
     }
 
-PAGINA = r'''<!DOCTYPE html>
+PAGINA = """<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
@@ -384,50 +384,138 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 var(--ff)} [hi
 <section class="cell"><div class="row" style="justify-content:space-between"><h3>Registro general de eventos</h3><button class="btn g" id="bReset">Reiniciar todo</button></div><ul id="log" class="log"></ul></section>
 </div>
 <script>
-const $=id=>document.getElementById(id), T=(id,v)=>{const e=$(id);if(e)e.textContent=v}; let E=null,tt=null;
+function $(id){ return document.getElementById(id); }
+function T(id,v){ const e=$(id); if(e) e.textContent=v; }
+let E=null, tt=null;
+
 const CUS=[
-['CU-01','Iniciar seguimiento del pedido','Transportista / Sistema de Gestión'],['CU-02','Recibir ubicación GPS','Servicio GPS'],['CU-03','Calcular ETA','Sistema de Gestión'],['CU-04','Actualizar ETA','Sistema de Gestión'],['CU-05','Actualizar estado del pedido','Transportista'],['CU-06','Consultar estado y ETA','Cliente'],['CU-07','Detectar proximidad','Sistema de Gestión'],['CU-08','Enviar alerta de proximidad','Cliente'],['CU-09','Registrar entrega efectiva','Transportista'],['CU-10','Registrar tiempos e historial','Sistema de Gestión']];
-function toast(a){document.querySelectorAll('.toast').forEach(x=>x.remove());const d=document.createElement('div');d.className='toast'+(a.ok?'':' bad');d.textContent=a.msg;document.body.appendChild(d);clearTimeout(tt);tt=setTimeout(()=>d.remove(),3500)}
-async function api(path,data={}){
-  const url = path.startsWith('/entrega') ? path : '/entrega' + path;
-  const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
-  const e=await r.json();if(e.aviso)toast(e.aviso);draw(e);return e;
+['CU-01','Iniciar seguimiento del pedido','Transportista / Sistema de Gestión'],
+['CU-02','Recibir ubicación GPS','Servicio GPS'],
+['CU-03','Calcular ETA','Sistema de Gestión'],
+['CU-04','Actualizar ETA','Sistema de Gestión'],
+['CU-05','Actualizar estado del pedido','Transportista'],
+['CU-06','Consultar estado y ETA','Cliente'],
+['CU-07','Detectar proximidad','Sistema de Gestión'],
+['CU-08','Enviar alerta de proximidad','Cliente'],
+['CU-09','Registrar entrega efectiva','Transportista'],
+['CU-10','Registrar tiempos e historial','Sistema de Gestión']
+];
+
+function ir(i){
+  for(let k=0; k<=10; k++){
+    const el = $('v'+k);
+    if(el) el.hidden = (k !== i);
+  }
+  const tabs = document.querySelectorAll('#tabs .tab');
+  tabs.forEach((b, k) => b.classList.toggle('on', k === i));
+  window.scrollTo(0, 0);
 }
-async function tick(){try{const r=await fetch('/entrega/api/tick',{method:'POST'});draw(await r.json())}catch(e){}setTimeout(tick,900)}
-function ir(i){for(let k=0;k<=10;k++)$('v'+k).hidden=k!==i;[...document.querySelectorAll('#tabs .tab')].forEach((b,k)=>b.classList.toggle('on',k===i));scrollTo(0,0)}
-function stateSteps(idx){return `<div class="stp">${['Preparado','En ruta','En domicilio','Entregado'].map((x,k)=>`<span class="${k<idx?'done':k===idx?'on':''}">${x}</span>`).join('')}</div>`}
-function mapHtml(e){const p=e.gps.p,x=38+230*p,y=205-135*p,w=260*p;return `<div class="map"><div class="radar ${e.pedidos[e.sel].proximidad?'in':''}"></div><div class="road"></div><div class="done-road" style="width:${w}px"></div><div class="truck" style="left:${x}px;top:${y}px">🚚</div><div class="home">⌂</div></div>`}
-function pedido(){return E.pedidos[E.sel]}
-function etaText(p){return p.eta?p.eta.ventana:p.eta_inicial?p.eta_inicial.ventana:'—'}
-function draw(e){E=e;const p=pedido();T('gPed',p.id);T('gSt',p.estado);T('gHora',e.hora);T('gKm',e.gps.km+' km');T('gEta',etaText(p));
-$('log').innerHTML=e.log.map(x=>`<li class="${x.nivel}"><time>${x.hora}</time><b>${x.cu}</b><span>${x.msg}</span></li>`).join('');
-renderResumen(); render01(); render02(); render03(); render04(); render05(); render06(); render07(); render08(); render09(); render10();}
-function renderResumen(){ $('resumenCU').innerHTML=CUS.map((c,i)=>`<div class="cu-card"><span class="badge">${c[0]}</span><b>${c[1]}</b><small>${c[2]}</small><br><button class="btn g" style="margin-top:8px" onclick="ir(${i+1})">Abrir</button></div>`).join('') }
-function render01(){const p=pedido();let h=`<b>Ruta de hoy · Camión V-214</b><small class="mt">${E.fecha}</small>`; if(!E.activo){h+=E.sin_pedidos?'<div class="nt bad">Sin pedidos asignados.</div>':E.pedidos.map(x=>`<div class="oc"><span><b>${x.id}</b><small>${x.producto}</small></span><span class="badge">${x.estado}</span></div>`).join('');h+=E.confirmando?'<div class="nt ok">¿Confirmar inicio del seguimiento?</div><div class="row"><button class="btn g" onclick="api(\'/api/cu01/cancelar\')">Cancelar</button><button class="btn" onclick="api(\'/api/cu01/confirmar\')">Confirmar</button></div>':`<button class="btn" ${E.sin_pedidos?'disabled':''} onclick="api('/api/cu01/preparar')">Iniciar recorrido</button>`}else{h+=`<div class="nt ok"><b>Seguimiento activo</b><br>${E.pedidos.length} pedidos en ruta.</div>${stateSteps(p.idx)}<a class="btn g" href="${E.maps_url}" target="_blank">Abrir ruta en Maps</a>`} $('cu01app').innerHTML=h;T('b01sin',E.sin_pedidos?'Volver a asignar pedidos':'Sin pedidos asignados');$('b01sin').disabled=E.activo;$('c01mail').checked=E.falla_correo}
-function render02(){ $('map02').innerHTML=mapHtml(E);T('b02run',E.gps.corriendo?'Pausar envíos GPS':'Iniciar envíos GPS');T('b02sig',E.gps.senal?'Perder señal':'Restablecer señal');T('k02a',E.gps.estado);T('k02b',E.gps.recibidas);T('k02c',E.gps.descartadas);T('k02d',E.gps.velocidad?E.gps.velocidad+' km/h':'—');$('s02int').value=E.gps.intervalo;$('gpsRaw').textContent=E.gps.paquete?JSON.stringify(E.gps.paquete,null,2):'Aún no se recibió un paquete GPS.'}
-function render03(){const p=pedido();$('s03ped').innerHTML=E.pedidos.map((x,i)=>`<option value="${i}">${x.id} · ${x.producto}</option>`).join('');$('s03ped').value=E.sel;$('n03par').value=E.params.paradas;$('c03gps').checked=E.params.gps_disponible;$('c03traf').checked=E.params.info_trafico;const pr=p.eta_inicial;T('k03a',pr?pr.eta:'—');T('k03b',pr?pr.ventana:'—');T('k03c',pr?pr.conf+' %':'—');T('d03',pr?`${pr.conduccion} min conducción + ${pr.paradas_min} min paradas · margen ±${pr.margen} min · ${pr.modelo}`:'Aún no hay ETA inicial.')}
-function render04(){const p=pedido();$('s04traf').value=E.params.trafico;$('c04auto').checked=E.auto_eta!==false;T('k04a',E.estado_eta);T('k04b',p.eta_inicial?p.eta_inicial.ventana:'—');T('k04c',p.eta?p.eta.ventana:'—');$('etaHist').innerHTML=p.eta_historial.length?`<table><tr><th>Hora</th><th>ETA</th><th>Tipo</th></tr>${p.eta_historial.slice().reverse().map(x=>`<tr><td>${x.hora}</td><td>${x.ventana}</td><td>${x.tipo}</td></tr>`).join('')}</table>`:'<p class="mt">Sin actualizaciones.</p>'}
-function render05(){const p=pedido(),ops=p.estado==='En ruta'?['En domicilio','Entrega no concretada']:p.estado==='En domicilio'?['Entrega no concretada']:[];let h=`<b>${p.id} · ${p.producto}</b>${stateSteps(p.idx)}<div class="oc"><span>Estado actual</span><span class="badge">${p.estado}</span></div>`; if(!E.activo)h+='<div class="nt bad">Primero inicie CU-01.</div>';else if(ops.length)h+=`<div class="fld"><label>Nuevo estado</label><select id="s05new">${ops.map(x=>`<option>${x}</option>`).join('')}<option>Entregado</option></select></div><button class="btn" onclick="api('/api/cu05/estado',{nuevo:$('s05new').value})">Guardar estado</button>`;else h+='<div class="nt">No hay transiciones disponibles desde CU-05.</div>';if(p.pendiente)h+=`<div class="nt wn">Pendiente de sincronizar: ${p.pendiente}</div>`;$('cu05app').innerHTML=h;T('p05conn',E.conexion?'Conexión activa. Los cambios se registran inmediatamente.':'Sin conexión. Los cambios se guardan en cola.');T('b05conn',E.conexion?'Perder conexión':'Restablecer conexión')}
-function render06(){const p=pedido(),c=E.cliente;$('cu06app').innerHTML=`<b>App Ripley · Mis pedidos</b><div class="row">${E.pedidos.map((x,i)=>`<button class="tab ${i===E.sel?'on':''}" onclick="api('/api/cu06/seleccionar',{valor:${i}})">${x.id}</button>`).join('')}</div><div class="oc"><span><b>${p.producto}</b><small>${p.direccion}</small></span><span class="badge">${c.estado}</span></div>${stateSteps(c.idx)}<div class="eta"><small>Llegada estimada</small><b>${c.eta}</b><small>Actualizado ${c.actualizado}</small></div>${c.proximidad?'<div class="nt ok">Tu pedido está cerca.</div>':''}${c.entregado?`<div class="nt ok">Entrega registrada a las ${c.hora_real}.</div>`:''}`;T('k06gps',E.gps.senal?'Disponible':'Sin señal');T('k06tr',E.trafico_nombres[E.params.trafico]);T('k06prox',p.proximidad?'Dentro del radio':'No detectada');T('k06not',E.notificaciones.length)}
-function render07(){const p=pedido();$('map07').innerHTML=mapHtml(E);$('r07').value=E.radio;T('k07a',E.gps.km+' km');T('k07b',E.radio+' km');T('k07c',p.proximidad?'Dentro del radio':'Fuera del radio');T('d07',E.comparacion?`${E.comparacion.distancia} km ${E.comparacion.dentro?'≤':'>'} ${E.comparacion.radio} km · ${E.comparacion.dentro?'proximidad detectada':'continúa monitoreo'} · ${E.comparacion.hora}`:'Aún no se ejecutó la comparación.')}
-function render08(){const p=pedido();$('c08push').checked=E.push;$('c08auto').checked=E.auto_alerta;$('b08send').disabled=!p.proximidad\vert{}\vert{}p.alerta;$('cu08app').innerHTML=`<b>App Ripley</b><div class="oc"><span><b>${p.id}</b><small>${p.producto}</small></span><span class="badge ${p.proximidad?'ok':''}">${p.proximidad?'Cerca':'En ruta'}</span></div>${p.alerta?'<div class="nt ok"><b>🔔 Tu pedido está cerca</b><br>El vehículo ingresó al radio de proximidad.</div>':'<div class="nt">Aún no se generó una alerta de proximidad.</div>'}`;$('notifs').innerHTML=E.notificaciones.length?E.notificaciones.slice(0,6).map(n=>`<div class="oc"><span><b>${n.titulo}</b><small>${n.hora} · ${n.pedido}<br>${n.cuerpo}</small></span><span class="badge ${n.enviada?'ok':'wn'}">${n.enviada?'Enviada':'En App'}</span></div>`).join(''):'<p class="mt">Sin notificaciones.</p>'}
-function render09(){const p=pedido();$('cu09app').innerHTML=`<b>${p.id} · ${p.producto}</b>${stateSteps(p.idx)}<div class="oc"><span>Estado</span><span class="badge ${p.estado==='Entregado'?'ok':''}">${p.estado}</span></div>${p.hora_real?`<div class="nt ok">Hora real de entrega: <b>${p.hora_real}</b></div>`:'<div class="nt">Aún no se registró la entrega efectiva.</div>'}`;$('b09del').disabled=p.estado!=='En domicilio'||p.estado==='Entregado'}
-function render10(){const p=pedido();T('k10a',p.eta_inicial?p.eta_inicial.eta:'—');T('k10b',p.eta?p.eta.eta:'—');T('k10c',p.hora_real||'—');T('k10d',E.trazabilidad.length);$('trace').innerHTML=`<table><tr><th>Hora</th><th>CU</th><th>Tipo</th><th>Pedido</th><th>Detalle</th></tr>${E.trazabilidad.slice(0,30).map(x=>`<tr><td>${x.hora}</td><td>${x.cu}</td><td>${x.tipo}</td><td>${x.pedido}</td><td>${x.detalle}</td></tr>`).join('')}</table>`}
 
-// Eventos
-$('b01sin').onclick=()=>api('/api/cu01/sin_pedidos');$('c01mail').onchange=e=>api('/api/cu01/falla_correo',{valor:e.target.checked});
-$('b02run').onclick=()=>api('/api/cu02/toggle');$('b02step').onclick=()=>api('/api/cu02/paso');$('b02sig').onclick=()=>api('/api/cu02/senal');$('b02bad').onclick=()=>api('/api/cu02/invalido');$('s02int').onchange=e=>api('/api/cu02/intervalo',{valor:+e.target.value});$('s03ped').onchange=e=>api('/api/cu06/seleccionar',{valor:+e.target.value});$('n03par').onchange=e=>api('/api/params',{paradas:+e.target.value});$('c03gps').onchange=e=>api('/api/params',{gps:e.target.checked});$('c03traf').onchange=e=>api('/api/params',{info:e.target.checked});$('b03calc').onclick=()=>api('/api/cu03/calcular');
-$('s04traf').onchange=e=>api('/api/cu04/trafico',{valor:+e.target.value});$('b04upd').onclick=()=>api('/api/cu04/actualizar');$('b04inc').onclick=()=>api('/api/cu04/incidente');$('c04auto').onchange=e=>api('/api/cu04/auto',{valor:e.target.checked});
-$('b05conn').onclick=()=>api('/api/conexion');$('b06ref').onclick=()=>api('/api/cu06/actualizar');
-$('r07').onchange=e=>api('/api/cu07/radio',{valor:+e.target.value});$('b07det').onclick=()=>api('/api/cu07/detectar');$('b07near').onclick=()=>api('/api/cu07/acercar');$('c08push').onchange=e=>api('/api/cu08/push',{valor:e.target.checked});$('c08auto').onchange=e=>api('/api/cu08/auto',{valor:e.target.checked});$('b08send').onclick=()=>api('/api/cu08/enviar');
-$('b09arr').onclick=()=>api('/api/cu09/llegada');$('b09del').onclick=()=>api('/api/cu09/entregar');$('b10snap').onclick=()=>api('/api/cu10/snapshot');$('bReset').onclick=()=>api('/api/reiniciar');
+function toast(a){
+  document.querySelectorAll('.toast').forEach(x=>x.remove());
+  const d=document.createElement('div');
+  d.className='toast'+(a.ok?'':' bad');
+  d.textContent=a.msg;
+  document.body.appendChild(d);
+  clearTimeout(tt);
+  tt=setTimeout(()=>d.remove(),3500);
+}
 
-// Construir pestañas
-$('tabs').innerHTML='<button class="tab on" onclick="ir(0)">Guía</button>'+CUS.map((c,i)=>`<button class="tab" onclick="ir(${i+1})">${c[0]}</button>`).join('');
-ir(0);tick();
+async function api(path, data={}){
+  const url = path.startsWith('/entrega') ? path : '/entrega' + path;
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(data)
+    });
+    const e = await r.json();
+    if(e.aviso) toast(e.aviso);
+    draw(e);
+    return e;
+  } catch(err) {
+    console.error('API Error:', err);
+  }
+}
+
+async function tick(){
+  try {
+    const r = await fetch('/entrega/api/tick', {method:'POST'});
+    const data = await r.json();
+    draw(data);
+  } catch(e){}
+  setTimeout(tick, 900);
+}
+
+function stateSteps(idx){
+  return '<div class="stp">' + ['Preparado','En ruta','En domicilio','Entregado'].map((x,k)=>`<span class="${k<idx?'done':k===idx?'on':''}">${x}</span>`).join('') + '</div>';
+}
+
+function mapHtml(e){
+  const p=e.gps.p, x=38+230*p, y=205-135*p, w=260*p;
+  return `<div class="map"><div class="radar ${e.pedidos[e.sel].proximidad?'in':''}"></div><div class="road"></div><div class="done-road" style="width:${w}px"></div><div class="truck" style="left:${x}px;top:${y}px">🚚</div><div class="home">⌂</div></div>`;
+}
+
+function pedido(){ return E.pedidos[E.sel]; }
+function etaText(p){ return p.eta ? p.eta.ventana : (p.eta_inicial ? p.eta_inicial.ventana : '—'); }
+
+function draw(e){
+  E=e; const p=pedido();
+  T('gPed',p.id); T('gSt',p.estado); T('gHora',e.hora); T('gKm',e.gps.km+' km'); T('gEta',etaText(p));
+  $('log').innerHTML=e.log.map(x=>`<li class="${x.nivel}"><time>${x.hora}</time><b>${x.cu}</b><span>${x.msg}</span></li>`).join('');
+  renderResumen(); render01(); render02(); render03(); render04(); render05(); render06(); render07(); render08(); render09(); render10();
+}
+
+function renderResumen(){ $('resumenCU').innerHTML=CUS.map((c,i)=>`<div class="cu-card"><span class="badge">${c[0]}</span><b>${c[1]}</b><small>${c[2]}</small><br><button class="btn g" style="margin-top:8px" onclick="ir(${i+1})">Abrir</button></div>`).join(''); }
+
+function render01(){
+  const p=pedido();
+  let h=`<b>Ruta de hoy · Camión V-214</b><small class="mt">${E.fecha}</small>`;
+  if(!E.activo){
+    h+=E.sin_pedidos?'<div class="nt bad">Sin pedidos asignados.</div>':E.pedidos.map(x=>`<div class="oc"><span><b>${x.id}</b><small>${x.producto}</small></span><span class="badge">${x.estado}</span></div>`).join('');
+    h+=E.confirmando?'<div class="nt ok">¿Confirmar inicio del seguimiento?</div><div class="row"><button class="btn g" onclick="api(\'/api/cu01/cancelar\')">Cancelar</button><button class="btn" onclick="api(\'/api/cu01/confirmar\')">Confirmar</button></div>':`<button class="btn" ${E.sin_pedidos?'disabled':''} onclick="api('/api/cu01/preparar')">Iniciar recorrido</button>`;
+  } else {
+    h+=`<div class="nt ok"><b>Seguimiento activo</b><br>${E.pedidos.length} pedidos en ruta.</div>${stateSteps(p.idx)}<a class="btn g" href="${E.maps_url}" target="_blank">Abrir ruta en Maps</a>`;
+  }
+  $('cu01app').innerHTML=h;
+  T('b01sin',E.sin_pedidos?'Volver a asignar pedidos':'Sin pedidos asignados');
+  $('b01sin').disabled=E.activo;
+  $('c01mail').checked=E.falla_correo;
+}
+
+function render02(){ $('map02').innerHTML=mapHtml(E);T('b02run',E.gps.corriendo?'Pausar envíos GPS':'Iniciar envíos GPS');T('b02sig',E.gps.senal?'Perder señal':'Restablecer señal');T('k02a',E.gps.estado);T('k02b',E.gps.recibidas);T('k02c',E.gps.descartadas);T('k02d',E.gps.velocidad?E.gps.velocidad+' km/h':'—');$('s02int').value=E.gps.intervalo;$('gpsRaw').textContent=E.gps.paquete?JSON.stringify(E.gps.paquete,null,2):'Aún no se recibió un paquete GPS.';}
+function render03(){const p=pedido();$('s03ped').innerHTML=E.pedidos.map((x,i)=>`<option value="${i}">${x.id} · ${x.producto}</option>`).join('');$('s03ped').value=E.sel;$('n03par').value=E.params.paradas;$('c03gps').checked=E.params.gps_disponible;$('c03traf').checked=E.params.info_trafico;const pr=p.eta_inicial;T('k03a',pr?pr.eta:'—');T('k03b',pr?pr.ventana:'—');T('k03c',pr?pr.conf+' %':'—');T('d03',pr?`${pr.conduccion} min conducción + ${pr.paradas_min} min paradas · margen ±${pr.margen} min · ${pr.modelo}`:'Aún no hay ETA inicial.');}
+function render04(){const p=pedido();$('s04traf').value=E.params.trafico;$('c04auto').checked=E.auto_eta!==false;T('k04a',E.estado_eta);T('k04b',p.eta_inicial?p.eta_inicial.ventana:'—');T('k04c',p.eta?p.eta.ventana:'—');$('etaHist').innerHTML=p.eta_historial.length?`<table><tr><th>Hora</th><th>ETA</th><th>Tipo</th></tr>${p.eta_historial.slice().reverse().map(x=>`<tr><td>${x.hora}</td><td>${x.ventana}</td><td>${x.tipo}</td></tr>`).join('')}</table>`:'<p class="mt">Sin actualizaciones.</p>';}
+function render05(){const p=pedido(),ops=p.estado==='En ruta'?['En domicilio','Entrega no concretada']:p.estado==='En domicilio'?['Entrega no concretada']:[];let h=`<b>${p.id} · ${p.producto}</b>${stateSteps(p.idx)}<div class="oc"><span>Estado actual</span><span class="badge">${p.estado}</span></div>`; if(!E.activo)h+='<div class="nt bad">Primero inicie CU-01.</div>';else if(ops.length)h+=`<div class="fld"><label>Nuevo estado</label><select id="s05new">${ops.map(x=>`<option>${x}</option>`).join('')}<option>Entregado</option></select></div><button class="btn" onclick="api('/api/cu05/estado',{nuevo:$('s05new').value})">Guardar estado</button>`;else h+='<div class="nt">No hay transiciones disponibles desde CU-05.</div>';if(p.pendiente)h+=`<div class="nt wn">Pendiente de sincronizar: ${p.pendiente}</div>`;$('cu05app').innerHTML=h;T('p05conn',E.conexion?'Conexión activa. Los cambios se registran inmediatamente.':'Sin conexión. Los cambios se guardan en cola.');T('b05conn',E.conexion?'Perder conexión':'Restablecer conexión');}
+function render06(){const p=pedido(),c=E.cliente;$('cu06app').innerHTML=`<b>App Ripley · Mis pedidos</b><div class="row">${E.pedidos.map((x,i)=>`<button class="tab ${i===E.sel?'on':''}" onclick="api('/api/cu06/seleccionar',{valor:${i}})">${x.id}</button>`).join('')}</div><div class="oc"><span><b>${p.producto}</b><small>${p.direccion}</small></span><span class="badge">${c.estado}</span></div>${stateSteps(c.idx)}<div class="eta"><small>Llegada estimada</small><b>${c.eta}</b><small>Actualizado ${c.actualizado}</small></div>${c.proximidad?'<div class="nt ok">Tu pedido está cerca.</div>':''}${c.entregado?`<div class="nt ok">Entrega registrada a las ${c.hora_real}.</div>`:''}`;T('k06gps',E.gps.senal?'Disponible':'Sin señal');T('k06tr',E.trafico_nombres[E.params.trafico]);T('k06prox',p.proximidad?'Dentro del radio':'No detectada');T('k06not',E.notificaciones.length);}
+function render07(){const p=pedido();$('map07').innerHTML=mapHtml(E);$('r07').value=E.radio;T('k07a',E.gps.km+' km');T('k07b',E.radio+' km');T('k07c',p.proximidad?'Dentro del radio':'Fuera del radio');T('d07',E.comparacion?`${E.comparacion.distancia} km ${E.comparacion.dentro?'<=':'>'} ${E.comparacion.radio} km · ${E.comparacion.dentro?'proximidad detectada':'continúa monitoreo'} · ${E.comparacion.hora}`:'Aún no se ejecutó la comparación.');}
+function render08(){const p=pedido();$('c08push').checked=E.push;$('c08auto').checked=E.auto_alerta;$('b08send').disabled=!p.proximidad\vert{}\vert{}p.alerta;$('cu08app').innerHTML=`<b>App Ripley</b><div class="oc"><span><b>${p.id}</b><small>${p.producto}</small></span><span class="badge ${p.proximidad?'ok':''}">${p.proximidad?'Cerca':'En ruta'}</span></div>${p.alerta?'<div class="nt ok"><b>🔔 Tu pedido está cerca</b><br>El vehículo ingresó al radio de proximidad.</div>':'<div class="nt">Aún no se generó una alerta de proximidad.</div>'}`;$('notifs').innerHTML=E.notificaciones.length?E.notificaciones.slice(0,6).map(n=>`<div class="oc"><span><b>${n.titulo}</b><small>${n.hora} · ${n.pedido}<br>${n.cuerpo}</small></span><span class="badge ${n.enviada?'ok':'wn'}">${n.enviada?'Enviada':'En App'}</span></div>`).join(''):'<p class="mt">Sin notificaciones.</p>';}
+function render09(){const p=pedido();$('cu09app').innerHTML=`<b>${p.id} · ${p.producto}</b>${stateSteps(p.idx)}<div class="oc"><span>Estado</span><span class="badge ${p.estado==='Entregado'?'ok':''}">${p.estado}</span></div>${p.hora_real?`<div class="nt ok">Hora real de entrega: <b>${p.hora_real}</b></div>`:'<div class="nt">Aún no se registró la entrega efectiva.</div>'}`;$('b09del').disabled=p.estado!=='En domicilio'||p.estado==='Entregado';}
+function render10(){const p=pedido();T('k10a',p.eta_inicial?p.eta_inicial.eta:'—');T('k10b',p.eta?p.eta.eta:'—');T('k10c',p.hora_real||'—');T('k10d',E.trazabilidad.length);$('trace').innerHTML=`<table><tr><th>Hora</th><th>CU</th><th>Tipo</th><th>Pedido</th><th>Detalle</th></tr>${E.trazabilidad.slice(0,30).map(x=>`<tr><td>${x.hora}</td><td>${x.cu}</td><td>${x.tipo}</td><td>${x.pedido}</td><td>${x.detalle}</td></tr>`).join('')}</table>`;}
+
+document.addEventListener("DOMContentLoaded", function() {
+  $('b01sin').onclick=()=>api('/api/cu01/sin_pedidos');$('c01mail').onchange=e=>api('/api/cu01/falla_correo',{valor:e.target.checked});
+  $('b02run').onclick=()=>api('/api/cu02/toggle');$('b02step').onclick=()=>api('/api/cu02/paso');
+  $('b02sig').onclick=()=>api('/api/cu02/senal');$('b02bad').onclick=()=>api('/api/cu02/invalido');
+  $('s02int').onchange=e=>api('/api/cu02/intervalo',{valor:+e.target.value});$('s03ped').onchange=e=>api('/api/cu06/seleccionar',{valor:+e.target.value});
+  $('n03par').onchange=e=>api('/api/params',{paradas:+e.target.value});$('c03gps').onchange=e=>api('/api/params',{gps:e.target.checked});
+  $('c03traf').onchange=e=>api('/api/params',{info:e.target.checked});$('b03calc').onclick=()=>api('/api/cu03/calcular');
+  $('s04traf').onchange=e=>api('/api/cu04/trafico',{valor:+e.target.value});$('b04upd').onclick=()=>api('/api/cu04/actualizar');
+  $('b04inc').onclick=()=>api('/api/cu04/incidente');$('c04auto').onchange=e=>api('/api/cu04/auto',{valor:e.target.checked});
+  $('b05conn').onclick=()=>api('/api/conexion');$('b06ref').onclick=()=>api('/api/cu06/actualizar');
+  $('r07').onchange=e=>api('/api/cu07/radio',{valor:+e.target.value});$('b07det').onclick=()=>api('/api/cu07/detectar');
+  $('b07near').onclick=()=>api('/api/cu07/acercar');$('c08push').onchange=e=>api('/api/cu08/push',{valor:e.target.checked});
+  $('c08auto').onchange=e=>api('/api/cu08/auto',{valor:e.target.checked});$('b08send').onclick=()=>api('/api/cu08/enviar');
+  $('b09arr').onclick=()=>api('/api/cu09/llegada');$('b09del').onclick=()=>api('/api/cu09/entregar');
+  $('b10snap').onclick=()=>api('/api/cu10/snapshot');$('bReset').onclick=()=>api('/api/reiniciar');
+
+  $('tabs').innerHTML='<button class="tab on" onclick="ir(0)">Guía</button>'+CUS.map((c,i)=>`<button class="tab" onclick="ir(${i+1})">${c[0]}</button>`).join('');
+  ir(0);
+  tick();
+});
 </script>
 </body>
-</html>'''
+</html>"""
 
 # -----------------------------------------------------------------------------
 # API Routes
